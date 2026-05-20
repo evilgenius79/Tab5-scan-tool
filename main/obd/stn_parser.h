@@ -1,0 +1,40 @@
+// =============================================================================
+//  stn_parser.h - Decode raw STN/ELM text into structured data.
+// -----------------------------------------------------------------------------
+//  Two responsibilities:
+//    1. parseCanFrame()  - turn a monitor-mode line (e.g. "7E8 04 41 0C 1A F8")
+//                          into a can_frame_t for the sniffer/logger.
+//    2. parsePidResponse() - extract the data bytes from a Mode 01/22 reply so
+//                          a PidDecoder can convert them to engineering units.
+//    3. parseDtcs()      - decode a Mode 03 reply into P/C/B/U trouble codes.
+//
+//  All functions are stateless and allocation-light (operate on caller buffers
+//  / std::string) so they are safe to call from the OBD task hot loop.
+// =============================================================================
+#pragma once
+
+#include <cstdint>
+#include <string>
+#include "core/can_types.h"
+#include "core/event_bus.h"   // DtcRecord
+
+namespace stn {
+
+// Parse one line of monitor output into `out`. Returns false if the line is
+// not a valid frame (status text, prompt, empty, etc.).
+bool parseCanFrame(const std::string& line, can_frame_t& out);
+
+// Parse a service-mode reply. `expect_mode` is the request mode byte (e.g.
+// 0x01) and `expect_pid` the PID; the parser validates the positive-response
+// echo (mode|0x40, pid) and copies the trailing data bytes into `data`.
+// Returns the number of data bytes, or -1 on a NO DATA / error / mismatch.
+int parsePidResponse(const std::string& resp, uint8_t expect_mode,
+                     uint16_t expect_pid, uint8_t* data, size_t max);
+
+// Decode a Mode 03 / 07 response into DTC records. Returns the count written.
+size_t parseDtcs(const std::string& resp, DtcRecord* out, size_t max);
+
+// Helper: true if the response is an adapter error token (NO DATA, ?, etc.).
+bool isErrorResponse(const std::string& resp);
+
+} // namespace stn

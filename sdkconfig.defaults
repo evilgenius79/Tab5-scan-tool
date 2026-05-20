@@ -1,0 +1,73 @@
+# =============================================================================
+#  Default sdkconfig for Tab5 Scan Tool (ESP32-P4 / M5Stack Tab5)
+#  These values are applied on a fresh `idf.py set-target esp32p4`.
+# =============================================================================
+
+# --- Target ------------------------------------------------------------------
+CONFIG_IDF_TARGET="esp32p4"
+
+# --- CPU ---------------------------------------------------------------------
+CONFIG_ESP_DEFAULT_CPU_FREQ_MHZ_360=y
+CONFIG_FREERTOS_HZ=1000
+
+# --- Flash -------------------------------------------------------------------
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
+CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+
+# --- PSRAM (octal, 32 MB on Tab5) --------------------------------------------
+# LVGL double framebuffers and CAN ring buffers are allocated from PSRAM.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_HEX=y
+CONFIG_SPIRAM_SPEED_200M=y
+CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y
+CONFIG_SPIRAM_RODATA=y
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=n
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+
+# --- USB Host (OTG-HS) -------------------------------------------------------
+# The OBDLink EX enumerates as an FTDI CDC device on the P4 USB 2.0 HS port.
+CONFIG_USB_HOST_CONTROL_TRANSFER_MAX_SIZE=1024
+
+# --- FreeRTOS ----------------------------------------------------------------
+CONFIG_FREERTOS_USE_TRACE_FACILITY=y
+CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
+
+# --- Main task / stacks ------------------------------------------------------
+CONFIG_ESP_MAIN_TASK_STACK_SIZE=8192
+
+# --- FATFS for the microSD CSV logger ---------------------------------------
+CONFIG_FATFS_LFN_HEAP=y
+CONFIG_FATFS_MAX_LFN=255
+
+# --- Logging -----------------------------------------------------------------
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y
+CONFIG_LOG_MAXIMUM_LEVEL_DEBUG=y
+
+# --- Compiler ----------------------------------------------------------------
+CONFIG_COMPILER_OPTIMIZATION_PERF=y
+CONFIG_COMPILER_CXX_EXCEPTIONS=n
+
+# --- LVGL 9 (configured via Kconfig in the managed component) ---------------
+# 16-bit color matches the Tab5 DSI panel pipeline.
+CONFIG_LV_COLOR_DEPTH_16=y
+# Fonts used across the UI (defaults only enable Montserrat 14).
+CONFIG_LV_FONT_MONTSERRAT_14=y
+CONFIG_LV_FONT_MONTSERRAT_16=y
+CONFIG_LV_FONT_MONTSERRAT_18=y
+CONFIG_LV_FONT_MONTSERRAT_20=y
+CONFIG_LV_FONT_MONTSERRAT_28=y
+CONFIG_LV_FONT_MONTSERRAT_48=y
+# Widgets the screens rely on.
+CONFIG_LV_USE_TABLE=y
+CONFIG_LV_USE_CHART=y
+CONFIG_LV_USE_KEYBOARD=y
+CONFIG_LV_USE_MSGBOX=y
+CONFIG_LV_USE_TABVIEW=y
+# Use esp_timer as LVGL's tick source (esp_lvgl_port wires this up).
+CONFIG_LV_TICK_CUSTOM=y
+# Larger LVGL heap for the 1280x720 widget tree, drawn from PSRAM.
+CONFIG_LV_MEM_SIZE_KILOBYTES=128
+CONFIG_LV_USE_PERF_MONITOR=n

@@ -1,0 +1,22 @@
+# =============================================================================
+#  Managed component dependencies (pulled by the IDF Component Manager).
+#  Run `idf.py reconfigure` to resolve these into managed_components/.
+# =============================================================================
+dependencies:
+  idf:
+    version: ">=5.3"
+
+  # --- Graphics ---------------------------------------------------------------
+  lvgl/lvgl: "^9.2.0"
+  espressif/esp_lvgl_port: "^2.4.0"
+
+  # --- M5Stack Tab5 board support (DSI panel, GT911 touch, SD, PMIC) ----------
+  # Provides bsp_display_start(), bsp_sdcard_mount(), bsp_display_brightness_set().
+  espressif/m5stack_tab5: "^1.0.0"
+
+  # --- USB Host virtual COM port stack ---------------------------------------
+  # esp_usb_host_vcp auto-loads the right line driver; the OBDLink EX uses FTDI.
+  espressif/usb_host_vcp: "^1.0.0"
+  espressif/usb_host_ftdi: "^2.0.0"
+  espressif/usb_host_cp210x: "^2.0.0"   # fallback for clone adapters
+  espressif/usb_host_ch34x_vcp: "^2.0.0"

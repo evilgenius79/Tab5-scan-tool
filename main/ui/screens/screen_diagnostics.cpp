@@ -1,0 +1,119 @@
+// =============================================================================
+//  screen_diagnostics.cpp - Screen 3: DTC read / clear.
+// -----------------------------------------------------------------------------
+//  A scrollable table of stored DTCs with READ and CLEAR actions. READ asks the
+//  OBD task to run Mode 03 and parse the codes into the EventBus DTC table;
+//  CLEAR runs Mode 04 (and turns off the MIL). A confirm step guards CLEAR so a
+//  stray touch doesn't wipe freeze-frame data.
+// =============================================================================
+#include "ui/screens/screens.h"
+#include "ui/ui_theme.h"
+#include "core/event_bus.h"
+
+#include <cstdio>
+
+namespace {
+
+lv_obj_t* g_table  = nullptr;
+lv_obj_t* g_status = nullptr;
+size_t    g_shown  = (size_t)-1;   // last rendered count (avoids needless redraw)
+
+void read_cb(lv_event_t*) {
+    ObdCommand c{ CmdType::ReadDtcs, 0, 0 };
+    EventBus::instance().sendCommand(c, 0);
+    lv_label_set_text(g_status, "Reading DTCs...");
+    g_shown = (size_t)-1;          // force refresh on next update
+}
+
+void clear_confirm_cb(lv_event_t* e) {
+    auto* mbox = (lv_obj_t*)lv_event_get_user_data(e);
+    ObdCommand c{ CmdType::ClearDtcs, 0, 0 };
+    EventBus::instance().sendCommand(c, 0);
+    lv_label_set_text(g_status, "DTCs cleared");
+    lv_msgbox_close(mbox);
+    g_shown = (size_t)-1;
+}
+
+void clear_cb(lv_event_t*) {
+    // Confirmation dialog - clearing also wipes freeze-frame data.
+    lv_obj_t* mbox = lv_msgbox_create(nullptr);
+    lv_msgbox_add_title(mbox, "Clear DTCs?");
+    lv_msgbox_add_text(mbox, "This erases stored codes and freeze-frame data.");
+    lv_obj_t* ok = lv_msgbox_add_footer_button(mbox, "Clear");
+    lv_msgbox_add_close_button(mbox);
+    lv_obj_add_event_cb(ok, clear_confirm_cb, LV_EVENT_CLICKED, mbox);
+}
+
+} // namespace
+
+void screen_diagnostics_create(lv_obj_t* parent) {
+    lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(parent, 12, 0);
+    lv_obj_set_style_pad_row(parent, 10, 0);
+
+    // Action bar.
+    lv_obj_t* bar = lv_obj_create(parent);
+    lv_obj_add_style(bar, &st_screen, 0);
+    lv_obj_set_width(bar, lv_pct(100));
+    lv_obj_set_height(bar, 64);
+    lv_obj_set_flex_flow(bar, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(bar, LV_FLEX_ALIGN_START, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(bar, 12, 0);
+    lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
+
+    lv_obj_t* read_btn = lv_btn_create(bar);
+    lv_obj_add_style(read_btn, &st_accent_btn, 0);
+    lv_obj_add_event_cb(read_btn, read_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* rl = lv_label_create(read_btn);
+    lv_label_set_text(rl, LV_SYMBOL_REFRESH " READ");
+    lv_obj_center(rl);
+
+    lv_obj_t* clr_btn = lv_btn_create(bar);
+    lv_obj_add_style(clr_btn, &st_accent_btn, 0);
+    lv_obj_set_style_border_color(clr_btn, COL_RED, 0);
+    lv_obj_set_style_text_color(clr_btn, COL_RED, 0);
+    lv_obj_add_event_cb(clr_btn, clear_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* cl = lv_label_create(clr_btn);
+    lv_label_set_text(cl, LV_SYMBOL_TRASH " CLEAR");
+    lv_obj_center(cl);
+
+    g_status = lv_label_create(bar);
+    lv_obj_add_style(g_status, &st_label_dim, 0);
+    lv_label_set_text(g_status, "Idle");
+
+    // DTC table.
+    g_table = lv_table_create(parent);
+    lv_obj_set_width(g_table, lv_pct(100));
+    lv_obj_set_flex_grow(g_table, 1);
+    lv_table_set_column_count(g_table, 2);
+    lv_table_set_column_width(g_table, 0, 160);
+    lv_table_set_column_width(g_table, 1, 760);
+    lv_table_set_cell_value(g_table, 0, 0, "CODE");
+    lv_table_set_cell_value(g_table, 0, 1, "DESCRIPTION");
+
+    lv_obj_set_style_bg_color(g_table, COL_PANEL, LV_PART_ITEMS);
+    lv_obj_set_style_text_color(g_table, COL_TEXT, LV_PART_ITEMS);
+    lv_obj_set_style_border_color(g_table, COL_GRID, LV_PART_ITEMS);
+    lv_obj_set_style_text_color(g_table, COL_CYAN, LV_PART_ITEMS | LV_STATE_DEFAULT);
+}
+
+void screen_diagnostics_update(void) {
+    DtcRecord recs[MAX_DTCS];
+    size_t n = EventBus::instance().getDtcs(recs, MAX_DTCS);
+    if (n == g_shown) return;            // nothing changed
+    g_shown = n;
+
+    lv_table_set_row_count(g_table, n + 1);
+    if (n == 0) {
+        lv_table_set_cell_value(g_table, 1, 0, "--");
+        lv_table_set_cell_value(g_table, 1, 1, "No stored trouble codes");
+        lv_table_set_row_count(g_table, 2);
+        return;
+    }
+    for (size_t i = 0; i < n; ++i) {
+        lv_table_set_cell_value(g_table, i + 1, 0, recs[i].code);
+        // A real build would map codes to text via a lookup table/SD database.
+        lv_table_set_cell_value(g_table, i + 1, 1, "(see code reference)");
+    }
+}
