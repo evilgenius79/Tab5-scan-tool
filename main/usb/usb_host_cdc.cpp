@@ -22,6 +22,8 @@
 // esp-usb VCP C++ headers.
 #include "usb/vcp.hpp"
 #include "usb/vcp_ftdi.hpp"
+#include "usb/vcp_cp210x.hpp"
+#include "usb/vcp_ch34x.hpp"
 #include "usb/cdc_acm_host.h"
 
 using namespace esp_usb;
@@ -63,9 +65,12 @@ bool UsbHostCdc::init(size_t rx_stream_bytes, ConnChangeCb on_change) {
     };
     ESP_ERROR_CHECK(cdc_acm_host_install(&cdc_cfg));
 
-    // Register concrete line drivers so VCP::open() can match VID/PID.
+    // Register concrete line drivers so VCP::open() can match the attached
+    // adapter by VID/PID. FT23x covers the genuine OBDLink EX; the others are
+    // fallbacks for clone adapters.
     VCP::register_driver<FT23x>();
-    // (cp210x / ch34x drivers self-register via their component init hooks.)
+    VCP::register_driver<CP210x>();
+    VCP::register_driver<CH34x>();
 
     // Daemon: services usb_host_lib_handle_events().
     xTaskCreatePinnedToCore(daemonTask, "usb_daemon", 4096, this,
@@ -126,12 +131,16 @@ void UsbHostCdc::hotplugTask(void* arg) {
         };
 
         ESP_LOGI(TAG, "waiting for OBD adapter...");
-        // VCP::open blocks until a matching device enumerates (or errors).
-        CdcAcmDevice* dev = VCP::open(&line_coding, &dev_cfg);
+        // VCP::open blocks until a matching device enumerates (or errors). It
+        // catches the driver constructor's throw and returns nullptr on failure.
+        CdcAcmDevice* dev = VCP::open(&dev_cfg);
         if (!dev) {
             vTaskDelay(pdMS_TO_TICKS(500));
             continue;   // retry
         }
+
+        // Apply the UART line coding now that the interface is open.
+        dev->line_coding_set(&line_coding);
 
         self->dev_  = dev;
         self->baud_ = line_coding.dwDTERate;
