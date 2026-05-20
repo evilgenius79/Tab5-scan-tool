@@ -15,8 +15,9 @@ dependencies:
   espressif/m5stack_tab5: "^1.0.0"
 
   # --- USB Host virtual COM port stack ---------------------------------------
-  # esp_usb_host_vcp auto-loads the right line driver; the OBDLink EX uses FTDI.
+  # usb_host_vcp provides the esp_usb::VCP registration framework; each line
+  # driver below registers a concrete device class. The OBDLink EX uses FTDI.
   espressif/usb_host_vcp: "^1.0.0"
-  espressif/usb_host_ftdi: "^2.0.0"
-  espressif/usb_host_cp210x: "^2.0.0"   # fallback for clone adapters
-  espressif/usb_host_ch34x_vcp: "^2.0.0"
+  espressif/usb_host_ftdi_vcp: "^2.1.0"
+  espressif/usb_host_cp210x_vcp: "^2.2.0"   # fallback for clone adapters
+  espressif/usb_host_ch34x_vcp: "^2.2.0"

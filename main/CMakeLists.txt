@@ -38,11 +38,11 @@ idf_component_register(
         # Public deps surfaced through headers.
         lvgl
         esp_lvgl_port
-        usb                  # usb_host.h (host library)
-        usb_host_vcp         # esp_usb::VCP
-        usb_host_ftdi        # FT23x line driver (OBDLink EX)
-        usb_host_cp210x      # clone fallback
-        usb_host_ch34x_vcp   # clone fallback
+        usb                    # usb_host.h (host library)
+        usb_host_vcp           # esp_usb::VCP
+        usb_host_ftdi_vcp      # FT23x line driver (OBDLink EX)
+        usb_host_cp210x_vcp    # clone fallback
+        usb_host_ch34x_vcp     # clone fallback
         m5stack_tab5         # Tab5 BSP (display/touch/SD)
         fatfs
         nvs_flash
