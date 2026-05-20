@@ -42,6 +42,15 @@ fi
 
 echo "Installing ESP-IDF ($IDF_BRANCH) for target $IDF_TARGET ..."
 
+# ESP-IDF's bundled openocd links against libusb at runtime; the base container
+# image doesn't ship it, which aborts install.sh. Install it up front (best
+# effort - building firmware itself doesn't need openocd, but install.sh
+# verifies every tool it unpacks).
+if command -v apt-get >/dev/null 2>&1; then
+  apt-get update -qq || true
+  apt-get install -y --no-install-recommends libusb-1.0-0 || true
+fi
+
 # Shallow clone keeps the download small; submodules are shallow too.
 if [ ! -d "$IDF_DIR/.git" ]; then
   mkdir -p "$HOME/esp"
