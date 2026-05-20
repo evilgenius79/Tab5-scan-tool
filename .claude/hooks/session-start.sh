@@ -18,7 +18,7 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
-IDF_BRANCH="release/v5.3"
+IDF_BRANCH="release/v5.4"
 IDF_DIR="$HOME/esp/esp-idf"
 IDF_TARGET="esp32p4"
 

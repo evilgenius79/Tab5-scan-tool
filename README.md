@@ -2,7 +2,7 @@
 
 A motorsport-grade automotive scantool and CAN sniffer for the **M5Stack Tab5**
 (ESP32-P4, 1280×720 IPS touchscreen) driving an **OBDLink EX** over the Tab5's
-USB-A host port. Built on **ESP-IDF 5.3+** and **LVGL 9**.
+USB-A host port. Built on **ESP-IDF 5.4+** and **LVGL 9**.
 
 ## Features
 
