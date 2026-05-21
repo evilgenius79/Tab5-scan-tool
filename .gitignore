@@ -7,6 +7,9 @@
 build/
 sdkconfig
 sdkconfig.old
+# PlatformIO writes a per-environment sdkconfig (sdkconfig.<env>); keep defaults.
+sdkconfig.*
+!sdkconfig.defaults
 managed_components/
 dependencies.lock
 
@@ -15,6 +18,9 @@ dependencies.lock
 .idea/
 *.swp
 .DS_Store
+
+# Machine-local Claude settings (not shared)
+.claude/settings.local.json
 
 # Logs / artifacts
 *.log
