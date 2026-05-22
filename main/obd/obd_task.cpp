@@ -64,11 +64,27 @@ void pollPid(const PidDef& pid) {
         return;
     }
 
-    // STPX wrapper: "STPX d:<request>, r:1" issues the OBD request with one
-    // expected response, minimizing adapter round-trip latency.
-    std::string cmd = std::string(STN_CMD_POLL_PREFIX) + "d:" + pid.request + ", r:1";
-    resp = g_link.sendCommand(cmd, &ok);
-    if (!ok) return;
+    // Send the plain OBD request (e.g. "010C"). Plain Mode 01/22 requests are
+    // universally supported; we previously wrapped these in STPX, whose syntax
+    // is finicky and was returning errors. The adapter answers with the
+    // positive-response echo + data (e.g. "41 0C 1A F8").
+    resp = g_link.sendCommand(pid.request, &ok);
+
+    // Throttled poll trace (~3 lines/s) -> console + SD diag.log. Lets an
+    // in-vehicle session be debugged afterward: shows the adapter's raw reply
+    // and whether it parsed, without flooding the log on every poll.
+    static uint64_t s_last_log = 0;
+    const uint64_t now = esp_timer_get_time();
+    const bool do_log = (now - s_last_log) > 300000;
+
+    if (!ok || stn::isErrorResponse(resp)) {
+        if (do_log) {
+            ESP_LOGI("Poll", "%-13s req=%s -> '%s' (no data)",
+                     pid.name, pid.request, resp.c_str());
+            s_last_log = now;
+        }
+        return;
+    }
 
     // Decode the request mode/pid from the catalog string (e.g. "010C").
     uint8_t  mode = (uint8_t)strtoul(std::string(pid.request).substr(0, 2).c_str(), nullptr, 16);
@@ -76,8 +92,14 @@ void pollPid(const PidDef& pid) {
 
     uint8_t data[16];
     int n = stn::parsePidResponse(resp, mode, pidn, data, sizeof(data));
+    if (do_log) {
+        ESP_LOGI("Poll", "%-13s req=%s -> '%s' n=%d",
+                 pid.name, pid.request, resp.c_str(), n);
+        s_last_log = now;
+    }
     if (n > 0 && pid.decode) {
         pid.decode(data, (uint8_t)n, g_telem);
+        g_telem.last_good_pid_us = esp_timer_get_time();   // freshness for UI/diag
     }
 }
 

@@ -7,8 +7,10 @@
 
 #include <cstdio>
 #include <cstring>
+#include <cstdarg>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 
@@ -23,6 +25,49 @@ bool   g_card_mounted = false;
 FILE*  g_file         = nullptr;
 bool   g_logging_can  = false;     // file shape currently open
 uint32_t g_rows       = 0;
+
+// --- Diagnostic log: mirror the ESP-IDF console (esp_log) to a file on SD so
+// an in-vehicle session can be reviewed afterward without a serial cable. ---
+FILE*             g_diag_file   = nullptr;
+SemaphoreHandle_t g_diag_mtx    = nullptr;
+vprintf_like_t    g_prev_vprintf = nullptr;   // original (UART) sink
+
+// esp_log hook: emit to the original UART sink AND append to the SD file.
+// The non-recursive mutex (taken with 0 timeout) also blocks reentrancy if a
+// FATFS write itself logs an error.
+int diag_vprintf(const char* fmt, va_list ap) {
+    va_list ap2;
+    va_copy(ap2, ap);
+    int r = g_prev_vprintf ? g_prev_vprintf(fmt, ap) : vprintf(fmt, ap);
+    if (g_diag_file && g_diag_mtx &&
+        xSemaphoreTake(g_diag_mtx, 0) == pdTRUE) {
+        vfprintf(g_diag_file, fmt, ap2);
+        xSemaphoreGive(g_diag_mtx);
+    }
+    va_end(ap2);
+    return r;
+}
+
+// Open the diagnostic log and install the hook. Call once, after SD is mounted.
+void diag_log_init() {
+    if (g_diag_file) return;
+    g_diag_file = fopen(SD_MOUNT_POINT "/diag.log", "w");
+    if (!g_diag_file) {
+        ESP_LOGW(TAG, "could not open diag.log");
+        return;
+    }
+    g_diag_mtx = xSemaphoreCreateMutex();
+    g_prev_vprintf = esp_log_set_vprintf(diag_vprintf);
+    ESP_LOGI(TAG, "diagnostic log -> " SD_MOUNT_POINT "/diag.log");
+}
+
+void diag_log_flush() {
+    if (g_diag_file && g_diag_mtx &&
+        xSemaphoreTake(g_diag_mtx, pdMS_TO_TICKS(20)) == pdTRUE) {
+        fflush(g_diag_file);
+        xSemaphoreGive(g_diag_mtx);
+    }
+}
 
 // Open a new timestamped CSV and write the header for the current mode.
 bool openFile(bool can_mode) {
@@ -87,10 +132,25 @@ void maybeFlush() {
 void loggerTask(void*) {
     auto& bus = EventBus::instance();
 
+    // Bring the diagnostic log up immediately (single mount attempt) so the
+    // adapter connect/init/poll sequence is captured for an in-vehicle review.
+    if (sd_card_ensure_mounted()) {
+        diag_log_init();
+    }
+
     can_frame_t frame;
     uint64_t last_telem_us = 0;
+    uint64_t last_diag_flush_us = 0;
 
     while (true) {
+        // Flush the diag log about once a second so an abrupt power-off (key
+        // off / unplug) loses at most ~1s of log tail.
+        const uint64_t now_us = esp_timer_get_time();
+        if (now_us - last_diag_flush_us >= 1000000ULL) {
+            diag_log_flush();
+            last_diag_flush_us = now_us;
+        }
+
         const bool want = bus.logging_enabled.load();
 
         if (want && !g_file) {

@@ -42,8 +42,12 @@ bool ObdLink::initialize() {
     static const Step seq[] = {
         { STN_CMD_ECHO_OFF,      "echo off"        },  // ATE0
         { STN_CMD_LINEFEED_OFF,  "linefeed off"    },  // ATL0
-        { STN_CMD_SPACES_OFF,    "spaces off"      },  // ATS0
-        { STN_CMD_HEADERS_ON,    "headers on"      },  // ATH1 (needed for sniffing)
+        // Keep spaces ON (no ATS0) and headers OFF for polling. With spaces
+        // stripped, an odd-length CAN header misaligns hex byte-pairing in the
+        // parser; keeping spaces lets each token be paired independently.
+        // Headers are off for clean Mode 01/22 responses; the sniffer's STMA
+        // monitor prints CAN IDs regardless of ATH.
+        { STN_CMD_HEADERS_OFF,   "headers off"     },  // ATH0
         { STN_CMD_ADAPTIVE_T2,   "adaptive timing" },  // ATAT2
         { STN_CMD_PROTO_AUTO,    "auto protocol"   },  // ATSP0
     };

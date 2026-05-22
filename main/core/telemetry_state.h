@@ -34,6 +34,7 @@ struct TelemetryState {
 
     // --- Health / freshness --------------------------------------------------
     uint64_t last_update_us;      // timestamp of newest field write
+    uint64_t last_good_pid_us;    // timestamp of last successfully decoded PID
     uint32_t poll_hz;             // measured poll loop frequency
     uint32_t frames_dropped;      // ring-buffer overflow counter
 };
