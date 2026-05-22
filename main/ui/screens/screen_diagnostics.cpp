@@ -9,6 +9,7 @@
 #include "ui/screens/screens.h"
 #include "ui/ui_theme.h"
 #include "core/event_bus.h"
+#include "obd/dtc_lookup.h"
 
 #include <cstdio>
 
@@ -21,6 +22,9 @@ size_t    g_shown  = (size_t)-1;   // last rendered count (avoids needless redra
 void read_cb(lv_event_t*) {
     ObdCommand c{ CmdType::ReadDtcs, 0, 0 };
     EventBus::instance().sendCommand(c, 0);
+    // Load the SD description database (if a card with dtc_db.csv is present)
+    // now, on this user action, so meanings are ready when the codes arrive.
+    dtc::ensureLoaded();
     lv_label_set_text(g_status, "Reading DTCs...");
     g_shown = (size_t)-1;          // force refresh on next update
 }
@@ -113,7 +117,8 @@ void screen_diagnostics_update(void) {
     }
     for (size_t i = 0; i < n; ++i) {
         lv_table_set_cell_value(g_table, i + 1, 0, recs[i].code);
-        // A real build would map codes to text via a lookup table/SD database.
-        lv_table_set_cell_value(g_table, i + 1, 1, "(see code reference)");
+        const char* desc = dtc::describe(recs[i].code);
+        lv_table_set_cell_value(g_table, i + 1, 1,
+                                desc ? desc : "(unknown - add to dtc_db.csv)");
     }
 }

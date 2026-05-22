@@ -84,21 +84,6 @@ void maybeFlush() {
     if (++g_rows % LOG_FLUSH_EVERY_N_ROWS == 0) fflush(g_file);
 }
 
-// Mount the SD card on demand. Returns true if mounted (or already was).
-// Mounting is lazy - attempted only when the user enables logging - because
-// bsp_sdcard_mount() powers the card via an on-chip LDO channel, and probing
-// it in a boot-time retry loop spams LDO-acquire errors when no card is present.
-static bool ensureCardMounted() {
-    if (g_card_mounted) return true;
-    if (bsp_sdcard_mount() == ESP_OK) {
-        g_card_mounted = true;
-        ESP_LOGI(TAG, "microSD mounted at %s", SD_MOUNT_POINT);
-        return true;
-    }
-    ESP_LOGW(TAG, "microSD mount failed (no card / LDO unavailable)");
-    return false;
-}
-
 void loggerTask(void*) {
     auto& bus = EventBus::instance();
 
@@ -111,7 +96,7 @@ void loggerTask(void*) {
         if (want && !g_file) {
             // Mount on first use; if the card/LDO isn't available, drop the
             // logging request so the UI switch reflects reality.
-            if (ensureCardMounted()) {
+            if (sd_card_ensure_mounted()) {
                 openFile(bus.mode.load() == ObdMode::Sniffing);
             } else {
                 bus.logging_enabled.store(false);
@@ -148,6 +133,20 @@ void loggerTask(void*) {
 }
 
 } // namespace
+
+// Lazy mount: attempted only on demand because bsp_sdcard_mount() powers the
+// card via an on-chip LDO channel, and probing it in a boot-time retry loop
+// spams LDO-acquire errors when no card is present.
+bool sd_card_ensure_mounted() {
+    if (g_card_mounted) return true;
+    if (bsp_sdcard_mount() == ESP_OK) {
+        g_card_mounted = true;
+        ESP_LOGI(TAG, "microSD mounted at %s", SD_MOUNT_POINT);
+        return true;
+    }
+    ESP_LOGW(TAG, "microSD mount failed (no card / LDO unavailable)");
+    return false;
+}
 
 void sd_logger_start() {
     xTaskCreatePinnedToCore(loggerTask, "sd_logger", STACK_SD_LOGGER, nullptr,

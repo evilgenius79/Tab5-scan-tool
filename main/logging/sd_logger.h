@@ -15,3 +15,8 @@
 // Mounts the SD card (via the Tab5 BSP) and spawns the logger task. Safe to
 // call once from app_main. If the card is absent the task idles and retries.
 void sd_logger_start();
+
+// Ensure the Tab5 microSD is mounted (idempotent). Returns true if the card is
+// available. Shared so other subsystems (e.g. the DTC database) can read files
+// off the card without racing the logger's own lazy mount.
+bool sd_card_ensure_mounted();

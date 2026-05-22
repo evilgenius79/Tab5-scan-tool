@@ -16,6 +16,7 @@ idf_component_register(
         # --- obd protocol layer ---------------------------------------------
         "obd/stn_parser.cpp"
         "obd/obd_task.cpp"
+        "obd/dtc_lookup.cpp"
 
         # --- sd card logging ------------------------------------------------
         "logging/sd_logger.cpp"

@@ -1,0 +1,30 @@
+# =============================================================================
+#  dtc_db.example.csv - optional DTC description database for the Tab5 Scan Tool
+# -----------------------------------------------------------------------------
+#  Copy this to the root of the microSD card as:  /sdcard/dtc_db.csv
+#
+#  Purpose: add manufacturer-specific codes (P1xxx, P3xxx, enhanced C/B/U) and
+#  override or extend the descriptions that ship in firmware - without
+#  reflashing. Entries here take precedence over the built-in generic table.
+#
+#  Format (one code per line):
+#      CODE,Description text
+#  - The first comma splits the code from the text; commas in the text are fine.
+#  - Codes are matched case-insensitively (stored upper-case).
+#  - Lines beginning with '#' and blank lines are ignored.
+#  - Up to 8000 entries; file up to 4 MB.
+# =============================================================================
+
+# --- Override / extend generic codes -----------------------------------------
+P0420,Catalyst System Efficiency Below Threshold (Bank 1) - check upstream O2
+
+# --- Manufacturer-specific examples (replace with codes for YOUR vehicle) -----
+# VAG / Audi / VW
+P1545,Throttle Position Control Malfunction
+P2015,Intake Manifold Runner Position Sensor/Switch Circuit (Bank 1)
+# BMW
+P1188,Fuel Control Mixture Lean (Bank 1)
+# Ford
+P1450,Unable to Bleed Up Fuel Tank Vacuum
+# GM
+P1133,HO2S Insufficient Switching (Bank 1 Sensor 1)
