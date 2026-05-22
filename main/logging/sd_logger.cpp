@@ -84,19 +84,23 @@ void maybeFlush() {
     if (++g_rows % LOG_FLUSH_EVERY_N_ROWS == 0) fflush(g_file);
 }
 
+// Mount the SD card on demand. Returns true if mounted (or already was).
+// Mounting is lazy - attempted only when the user enables logging - because
+// bsp_sdcard_mount() powers the card via an on-chip LDO channel, and probing
+// it in a boot-time retry loop spams LDO-acquire errors when no card is present.
+static bool ensureCardMounted() {
+    if (g_card_mounted) return true;
+    if (bsp_sdcard_mount() == ESP_OK) {
+        g_card_mounted = true;
+        ESP_LOGI(TAG, "microSD mounted at %s", SD_MOUNT_POINT);
+        return true;
+    }
+    ESP_LOGW(TAG, "microSD mount failed (no card / LDO unavailable)");
+    return false;
+}
+
 void loggerTask(void*) {
     auto& bus = EventBus::instance();
-
-    // Mount the card once; retry slowly if absent so a later insert works.
-    while (!g_card_mounted) {
-        if (bsp_sdcard_mount() == ESP_OK) {
-            g_card_mounted = true;
-            ESP_LOGI(TAG, "microSD mounted at %s", SD_MOUNT_POINT);
-        } else {
-            ESP_LOGW(TAG, "no microSD; retrying");
-            vTaskDelay(pdMS_TO_TICKS(2000));
-        }
-    }
 
     can_frame_t frame;
     uint64_t last_telem_us = 0;
@@ -105,8 +109,14 @@ void loggerTask(void*) {
         const bool want = bus.logging_enabled.load();
 
         if (want && !g_file) {
-            // Pick file shape from the mode at the moment logging starts.
-            openFile(bus.mode.load() == ObdMode::Sniffing);
+            // Mount on first use; if the card/LDO isn't available, drop the
+            // logging request so the UI switch reflects reality.
+            if (ensureCardMounted()) {
+                openFile(bus.mode.load() == ObdMode::Sniffing);
+            } else {
+                bus.logging_enabled.store(false);
+                vTaskDelay(pdMS_TO_TICKS(500));
+            }
         } else if (!want && g_file) {
             // Drain any remaining frames before closing for a clean tail.
             while (bus.loggerRing().pop(frame)) writeFrameRow(frame);

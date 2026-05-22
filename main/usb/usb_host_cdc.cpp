@@ -124,7 +124,9 @@ void UsbHostCdc::hotplugTask(void* arg) {
         const cdc_acm_host_device_config_t dev_cfg = {
             .connection_timeout_ms = 5000,
             .out_buffer_size       = 512,
-            .in_buffer_size        = 512,
+            // 0 => use the IN endpoint's max packet size. The FTDI VCP driver
+            // rejects an explicit 512 ("RX FIFO size 512 is not supported").
+            .in_buffer_size        = 0,
             .event_cb              = nullptr,
             .data_cb               = &UsbHostCdc::rxTrampoline,
             .user_arg              = self,

@@ -18,14 +18,26 @@ CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 
 # --- PSRAM (octal, 32 MB on Tab5) --------------------------------------------
-# LVGL double framebuffers and CAN ring buffers are allocated from PSRAM.
+# LVGL framebuffers and CAN ring buffers are allocated from PSRAM.
+# IMPORTANT: do NOT execute code / place rodata in PSRAM. The MIPI-DSI panel
+# DMAs its framebuffer out of PSRAM at ~110 MB/s; letting the CPU also fetch
+# instructions/rodata from PSRAM starves the DSI and causes
+# "lcd.dsi.dpi: can't fetch data ... underrun happens" (a blue/garbled screen).
 CONFIG_SPIRAM=y
 CONFIG_SPIRAM_MODE_HEX=y
+# 200 MHz octal PSRAM is required to feed the 1280x720 DSI panel (~120 MB/s).
+# On the ESP32-P4 this speed is gated behind the experimental-features flag;
+# without it Kconfig silently drops 200M and PSRAM falls back to 20 MHz, which
+# starves the DSI ("...can't fetch data... underrun") -> blue/garbled screen.
+CONFIG_IDF_EXPERIMENTAL_FEATURES=y
 CONFIG_SPIRAM_SPEED_200M=y
-CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y
-CONFIG_SPIRAM_RODATA=y
+CONFIG_SPIRAM_FETCH_INSTRUCTIONS=n
+CONFIG_SPIRAM_RODATA=n
 CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=n
 CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=16384
+
+# 128-byte L2 cache lines improve PSRAM burst throughput for the framebuffer DMA.
+CONFIG_CACHE_L2_CACHE_LINE_128B=y
 
 # --- USB Host (OTG-HS) -------------------------------------------------------
 # The OBDLink EX enumerates as an FTDI CDC device on the P4 USB 2.0 HS port.
