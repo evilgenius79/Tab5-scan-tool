@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdarg>
+#include <unistd.h>     // fsync()
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -63,9 +64,14 @@ void diag_log_init() {
 
 void diag_log_flush() {
     if (g_diag_file && g_diag_mtx &&
-        xSemaphoreTake(g_diag_mtx, pdMS_TO_TICKS(20)) == pdTRUE) {
-        fflush(g_diag_file);
+        xSemaphoreTake(g_diag_mtx, pdMS_TO_TICKS(50)) == pdTRUE) {
+        fflush(g_diag_file);                 // C stdio buffer -> FATFS
+        fsync(fileno(g_diag_file));          // commit FAT directory entry/size
+        long sz = ftell(g_diag_file);
         xSemaphoreGive(g_diag_mtx);
+        // One-shot confirmation that bytes are actually landing on the card.
+        static bool reported = false;
+        if (!reported) { reported = true; ESP_LOGI(TAG, "diag.log committed (%ld bytes)", sz); }
     }
 }
 
