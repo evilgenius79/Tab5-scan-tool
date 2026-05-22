@@ -19,6 +19,7 @@
 
 #include "usb/usb_host_cdc.h"
 #include "core/can_types.h"
+#include "app_config.h"   // OBD_CMD_TIMEOUT_MS (default arg below)
 
 class ObdLink {
 public:
@@ -31,9 +32,11 @@ public:
 
     // Send `cmd` (no trailing CR needed) and collect the response up to the
     // '>' prompt. Returns the trimmed response; `ok` reflects whether the
-    // adapter answered before OBD_CMD_TIMEOUT_MS. Echo and whitespace lines
-    // are stripped.
-    std::string sendCommand(const std::string& cmd, bool* ok = nullptr);
+    // adapter answered before `timeout_ms`. Echo and whitespace lines are
+    // stripped. Use a long timeout for protocol auto-search (ATSP0 + 0100),
+    // which can take several seconds on a live vehicle.
+    std::string sendCommand(const std::string& cmd, bool* ok = nullptr,
+                            uint32_t timeout_ms = OBD_CMD_TIMEOUT_MS);
 
     // Fire-and-forget: write a command without waiting for a prompt. Used to
     // kick off monitor modes (STMA/STMF) that stream until interrupted.

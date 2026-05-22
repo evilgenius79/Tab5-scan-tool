@@ -59,7 +59,17 @@ bool ObdLink::initialize() {
         if (!ok) return false;
     }
 
-    // Probe protocol/voltage to confirm a live ECU link.
+    // Establish/lock the OBD protocol BEFORE polling. ATSP0 auto-search runs
+    // on the first real request and can take several seconds on a live vehicle
+    // ("SEARCHING..."). Give this probe a long timeout so we don't cut the
+    // search short - doing so repeatedly is what produced perpetual SEARCHING
+    // and finally "UNABLE TO CONNECT". 0100 = supported-PIDs, the canonical
+    // protocol-detection request.
+    bool probe_ok = false;
+    std::string probe = sendCommand("0100", &probe_ok, 10000);
+    ESP_LOGI(TAG, "0100 protocol probe -> '%s'", probe.c_str());
+
+    // Report the negotiated protocol (ATDPN: e.g. "6" = ISO 15765-4 CAN 11/500).
     std::string proto = sendCommand(STN_CMD_DESCRIBE_PROTO, &ok);
     ESP_LOGI(TAG, "protocol: %s", proto.c_str());
     return ok;
@@ -68,14 +78,15 @@ bool ObdLink::initialize() {
 // ---------------------------------------------------------------------------
 //  Synchronous command/response.
 // ---------------------------------------------------------------------------
-std::string ObdLink::sendCommand(const std::string& cmd, bool* ok) {
+std::string ObdLink::sendCommand(const std::string& cmd, bool* ok,
+                                 uint32_t timeout_ms) {
     usb_.flushRx();                 // discard any stale bytes
     std::string line = cmd + "\r";
     usb_.write(reinterpret_cast<const uint8_t*>(line.data()), line.size(),
                OBD_CMD_TIMEOUT_MS);
 
     std::string acc;
-    bool got = readUntil('>', acc, OBD_CMD_TIMEOUT_MS);
+    bool got = readUntil('>', acc, timeout_ms);
     if (ok) *ok = got;
 
     // The reply echoes nothing (ATE0) so `acc` is the bare answer + prompt.
