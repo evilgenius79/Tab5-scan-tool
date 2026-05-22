@@ -57,10 +57,12 @@
 // -----------------------------------------------------------------------------
 //  OBDLink EX / STN defaults
 // -----------------------------------------------------------------------------
-//  The OBDLink EX negotiates up to 2 Mbps over its FTDI link. Start fast; the
-//  Settings screen can renegotiate via STBR.
-#define OBD_DEFAULT_BAUD         2000000
-#define OBD_FALLBACK_BAUD        115200
+//  The OBDLink EX powers on at 115200 baud (verified: ScanTool FRPM / default
+//  STN UART rate). We MUST open the FTDI link at this rate or the adapter never
+//  sees valid AT commands and init fails. The Settings screen can renegotiate
+//  higher (up to 2 Mbps) at runtime via STBR once the link is up.
+#define OBD_DEFAULT_BAUD         115200
+#define OBD_FALLBACK_BAUD        38400     // pre-v2 firmware default
 
 //  Milliseconds with no successful response before we declare the link dead
 //  and kick the auto-reconnect path.

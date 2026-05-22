@@ -18,6 +18,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "usb/usb_host.h"
+#include "bsp/esp-bsp.h"   // bsp_usb_host_start() - enables USB-A VBUS power
 
 // esp-usb VCP C++ headers.
 #include "usb/vcp.hpp"
@@ -45,14 +46,16 @@ bool UsbHostCdc::init(size_t rx_stream_bytes, ConnChangeCb on_change) {
         return false;
     }
 
-    // Install the USB Host library. The daemon task pumps its event loop.
-    const usb_host_config_t host_cfg = {
-        .skip_phy_setup = false,
-        .intr_flags     = ESP_INTR_FLAG_LEVEL1,
-    };
-    esp_err_t err = usb_host_install(&host_cfg);
+    // Enable USB-A host VBUS power and install the USB Host library.
+    // CRITICAL: on the Tab5 the USB-A port's 5V is gated by an IO-expander pin
+    // (BSP_USB_EN). bsp_usb_host_start() flips that on (bsp_feature_enable),
+    // installs the host library, AND spawns the lib event task. Calling
+    // usb_host_install() directly (as we used to) leaves the port unpowered, so
+    // the OBDLink EX never lights up or enumerates. Requires the BSP I2C bus,
+    // which bsp_display_start() (run earlier in ui_init) has already brought up.
+    esp_err_t err = bsp_usb_host_start(BSP_USB_HOST_POWER_MODE_USB_DEV, true);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "usb_host_install: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "bsp_usb_host_start: %s", esp_err_to_name(err));
         return false;
     }
 
@@ -72,10 +75,9 @@ bool UsbHostCdc::init(size_t rx_stream_bytes, ConnChangeCb on_change) {
     VCP::register_driver<CP210x>();
     VCP::register_driver<CH34x>();
 
-    // Daemon: services usb_host_lib_handle_events().
-    xTaskCreatePinnedToCore(daemonTask, "usb_daemon", 4096, this,
-                            PRIO_USB_RX, nullptr, APP_CORE_IO);
-    // Hotplug: opens/reopens the VCP device.
+    // NOTE: bsp_usb_host_start() already spawned the task that services
+    // usb_host_lib_handle_events(), so we do NOT start our own daemon (only one
+    // task may pump the host-lib event loop). We only run the hotplug opener.
     xTaskCreatePinnedToCore(hotplugTask, "usb_hotplug", 4096, this,
                             PRIO_USB_RX - 1, nullptr, APP_CORE_IO);
 

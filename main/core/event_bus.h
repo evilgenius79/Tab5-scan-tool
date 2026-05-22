@@ -79,7 +79,10 @@ public:
 
     // --- Lightweight status (lock-free) -------------------------------------
     std::atomic<LinkState> link{LinkState::Disconnected};
-    std::atomic<ObdMode>   mode{ObdMode::Idle};
+    // Default to Polling so the live dashboard populates as soon as the adapter
+    // is online. The OBD task only acts on this once link == Online, and the
+    // Sniffer screen flips it to Sniffing on demand.
+    std::atomic<ObdMode>   mode{ObdMode::Polling};
     std::atomic<CanBus>    bus{CanBus::HS_CAN};
     std::atomic<bool>      logging_enabled{false};
     std::atomic<bool>      sniffer_frozen{false};
