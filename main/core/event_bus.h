@@ -38,6 +38,7 @@ enum class CmdType : uint8_t {
     SelectBus,       // arg0 = CanBus
     StartPerfRun,    // arm the 0-60 / quarter-mile capture
     Reconnect,       // force USB re-enumeration
+    ReadVin,         // OBD Mode 09 PID 02 (vehicle VIN)
 };
 
 struct ObdCommand {
@@ -54,6 +55,17 @@ struct DtcRecord {
     uint8_t  status;      // pending/confirmed/permanent bitfield
 };
 static constexpr size_t MAX_DTCS = 64;
+
+// -----------------------------------------------------------------------------
+//  Vehicle identification (populated by ReadVin). VIN comes from the car over
+//  OBD; manufacturer/year are decoded offline from the VIN itself.
+// -----------------------------------------------------------------------------
+struct VehicleInfo {
+    char vin[18];           // 17 chars + NUL; empty string if not yet read
+    char manufacturer[28];  // decoded from the WMI (chars 1-3), "" if unknown
+    int  model_year;        // decoded from char 10, 0 if unknown
+    bool valid;             // true once a VIN has been read and parsed
+};
 
 // -----------------------------------------------------------------------------
 //  The bus.
@@ -93,6 +105,10 @@ public:
     void  setDtcs(const DtcRecord* recs, size_t count);
     size_t getDtcs(DtcRecord* out, size_t max);
 
+    // --- Vehicle info (guarded by veh_mtx_) ---------------------------------
+    void        setVehicleInfo(const VehicleInfo& info);
+    VehicleInfo getVehicleInfo();
+
 private:
     EventBus() = default;
 
@@ -107,4 +123,7 @@ private:
     SemaphoreHandle_t   dtc_mtx_    = nullptr;
     DtcRecord           dtcs_[MAX_DTCS]{};
     size_t              dtc_count_  = 0;
+
+    SemaphoreHandle_t   veh_mtx_    = nullptr;
+    VehicleInfo         vehicle_{};
 };

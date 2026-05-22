@@ -15,9 +15,10 @@ EventBus& EventBus::instance() {
 bool EventBus::init() {
     telem_mtx_ = xSemaphoreCreateMutex();
     dtc_mtx_   = xSemaphoreCreateMutex();
+    veh_mtx_   = xSemaphoreCreateMutex();
     cmd_queue_ = xQueueCreate(OBD_CMD_QUEUE_DEPTH, sizeof(ObdCommand));
 
-    if (!telem_mtx_ || !dtc_mtx_ || !cmd_queue_) {
+    if (!telem_mtx_ || !dtc_mtx_ || !veh_mtx_ || !cmd_queue_) {
         ESP_LOGE(TAG, "primitive allocation failed");
         return false;
     }
@@ -76,4 +77,21 @@ size_t EventBus::getDtcs(DtcRecord* out, size_t max) {
         xSemaphoreGive(dtc_mtx_);
     }
     return n;
+}
+
+// --- Vehicle info -----------------------------------------------------------
+void EventBus::setVehicleInfo(const VehicleInfo& info) {
+    if (xSemaphoreTake(veh_mtx_, pdMS_TO_TICKS(50)) == pdTRUE) {
+        vehicle_ = info;
+        xSemaphoreGive(veh_mtx_);
+    }
+}
+
+VehicleInfo EventBus::getVehicleInfo() {
+    VehicleInfo copy{};
+    if (xSemaphoreTake(veh_mtx_, pdMS_TO_TICKS(50)) == pdTRUE) {
+        copy = vehicle_;
+        xSemaphoreGive(veh_mtx_);
+    }
+    return copy;
 }

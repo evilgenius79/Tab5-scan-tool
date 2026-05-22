@@ -34,6 +34,13 @@ int parsePidResponse(const std::string& resp, uint8_t expect_mode,
 // Decode a Mode 03 / 07 response into DTC records. Returns the count written.
 size_t parseDtcs(const std::string& resp, DtcRecord* out, size_t max);
 
+// Decode a Mode 09 PID 02 (VIN) response. The 17 ASCII characters are written
+// to `out` (must hold at least 18 bytes, NUL-terminated). Returns true if a
+// full 17-character VIN was extracted. Call with the adapter's CAN
+// auto-formatting on and headers off so the multi-frame ISO-TP reply is
+// already reassembled.
+bool parseVin(const std::string& resp, char* out);
+
 // Helper: true if the response is an adapter error token (NO DATA, ?, etc.).
 bool isErrorResponse(const std::string& resp);
 

@@ -50,3 +50,4 @@
 #define OBD_MODE_READ_DTC        "03"       // stored DTCs
 #define OBD_MODE_CLEAR_DTC       "04"       // clear DTCs + MIL
 #define OBD_MODE_PENDING_DTC     "07"       // pending DTCs
+#define OBD_MODE_VIN             "0902"     // Mode 09 PID 02: vehicle VIN

@@ -17,7 +17,16 @@ namespace {
 
 lv_obj_t* g_table  = nullptr;
 lv_obj_t* g_status = nullptr;
+lv_obj_t* g_vin    = nullptr;
 size_t    g_shown  = (size_t)-1;   // last rendered count (avoids needless redraw)
+bool      g_vin_shown = false;     // whether a VIN has been rendered yet
+
+void vin_cb(lv_event_t*) {
+    ObdCommand c{ CmdType::ReadVin, 0, 0 };
+    EventBus::instance().sendCommand(c, 0);
+    lv_label_set_text(g_vin, "VIN: reading...");
+    g_vin_shown = false;           // force refresh once the result lands
+}
 
 void read_cb(lv_event_t*) {
     ObdCommand c{ CmdType::ReadDtcs, 0, 0 };
@@ -82,9 +91,22 @@ void screen_diagnostics_create(lv_obj_t* parent) {
     lv_label_set_text(cl, LV_SYMBOL_TRASH " CLEAR");
     lv_obj_center(cl);
 
+    lv_obj_t* vin_btn = lv_btn_create(bar);
+    lv_obj_add_style(vin_btn, &st_accent_btn, 0);
+    lv_obj_add_event_cb(vin_btn, vin_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* vl = lv_label_create(vin_btn);
+    lv_label_set_text(vl, LV_SYMBOL_LIST " VIN");
+    lv_obj_center(vl);
+
     g_status = lv_label_create(bar);
     lv_obj_add_style(g_status, &st_label_dim, 0);
     lv_label_set_text(g_status, "Idle");
+
+    // Vehicle identification (filled by the VIN button).
+    g_vin = lv_label_create(parent);
+    lv_obj_add_style(g_vin, &st_label_dim, 0);
+    lv_obj_set_width(g_vin, lv_pct(100));
+    lv_label_set_text(g_vin, "VIN: --");
 
     // DTC table.
     g_table = lv_table_create(parent);
@@ -103,6 +125,25 @@ void screen_diagnostics_create(lv_obj_t* parent) {
 }
 
 void screen_diagnostics_update(void) {
+    // Refresh the VIN line once a read has produced a result.
+    if (!g_vin_shown) {
+        VehicleInfo v = EventBus::instance().getVehicleInfo();
+        if (v.valid) {
+            char line[96];
+            if (v.manufacturer[0] && v.model_year) {
+                snprintf(line, sizeof(line), "VIN: %s   (%d %s)",
+                         v.vin, v.model_year, v.manufacturer);
+            } else if (v.manufacturer[0]) {
+                snprintf(line, sizeof(line), "VIN: %s   (%s)",
+                         v.vin, v.manufacturer);
+            } else {
+                snprintf(line, sizeof(line), "VIN: %s", v.vin);
+            }
+            lv_label_set_text(g_vin, line);
+            g_vin_shown = true;
+        }
+    }
+
     DtcRecord recs[MAX_DTCS];
     size_t n = EventBus::instance().getDtcs(recs, MAX_DTCS);
     if (n == g_shown) return;            // nothing changed

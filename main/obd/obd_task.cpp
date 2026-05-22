@@ -5,6 +5,7 @@
 #include "obd/stn_commands.h"
 #include "obd/stn_parser.h"
 #include "obd/pid_definitions.h"
+#include "obd/vin_decode.h"
 
 #include "usb/usb_host_cdc.h"
 #include "usb/obd_link.h"
@@ -162,6 +163,31 @@ void applyCommand(const ObdCommand& cmd) {
         size_t n = stn::parseDtcs(resp, recs, MAX_DTCS);
         bus.setDtcs(recs, n);
         ESP_LOGI(TAG, "read %u DTCs", (unsigned)n);
+        break;
+    }
+
+    case CmdType::ReadVin: {
+        // VIN is a multi-frame ISO-TP reply. Drop CAN headers for the request
+        // so the adapter's reassembled output is clean, then restore them (the
+        // sniffer needs ATH1).
+        g_link.sendCommand(STN_CMD_HEADERS_OFF, &ok);
+        std::string resp = g_link.sendCommand(OBD_MODE_VIN, &ok);
+        g_link.sendCommand(STN_CMD_HEADERS_ON, &ok);
+
+        VehicleInfo info{};
+        if (ok && stn::parseVin(resp, info.vin)) {
+            info.valid = true;
+            if (const char* mk = vin::manufacturer(info.vin)) {
+                strncpy(info.manufacturer, mk, sizeof(info.manufacturer) - 1);
+            }
+            info.model_year = vin::model_year(info.vin);
+            ESP_LOGI(TAG, "VIN %s (%s %d)", info.vin,
+                     info.manufacturer[0] ? info.manufacturer : "?",
+                     info.model_year);
+        } else {
+            ESP_LOGW(TAG, "VIN read failed");
+        }
+        bus.setVehicleInfo(info);
         break;
     }
 

@@ -161,4 +161,35 @@ size_t parseDtcs(const std::string& resp, DtcRecord* out, size_t max) {
     return count;
 }
 
+// ---------------------------------------------------------------------------
+//  Mode 09 PID 02 VIN decode. After ISO-TP reassembly (CAN auto-format on,
+//  headers off) the data stream contains the positive-response echo 49 02,
+//  then a NODI count byte (01), then the 17 ASCII VIN characters. We scan for
+//  the 49 02 echo to skip any leading framing (e.g. the ELM length line), then
+//  copy the printable bytes that follow.
+// ---------------------------------------------------------------------------
+bool parseVin(const std::string& resp, char* out) {
+    out[0] = '\0';
+    if (isErrorResponse(resp)) return false;
+    auto bytes = hexBytes(resp);
+
+    for (size_t i = 0; i + 1 < bytes.size(); ++i) {
+        if (bytes[i] != 0x49 || bytes[i + 1] != 0x02) continue;
+
+        size_t start = i + 2;
+        // Skip the NODI (number-of-data-items) byte when present.
+        if (start < bytes.size() && bytes[start] == 0x01) ++start;
+
+        size_t n = 0;
+        for (size_t j = start; j < bytes.size() && n < 17; ++j) {
+            uint8_t c = bytes[j];
+            if (c < 0x20 || c > 0x7E) break;   // stop at non-printable framing
+            out[n++] = (char)c;
+        }
+        out[n] = '\0';
+        return n == 17;
+    }
+    return false;
+}
+
 } // namespace stn

@@ -17,6 +17,7 @@ idf_component_register(
         "obd/stn_parser.cpp"
         "obd/obd_task.cpp"
         "obd/dtc_lookup.cpp"
+        "obd/vin_decode.cpp"
 
         # --- sd card logging ------------------------------------------------
         "logging/sd_logger.cpp"
