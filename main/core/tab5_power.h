@@ -15,4 +15,11 @@ void enable_charging();
 // True if the charge-status pin reports charging (trickle/charging in progress).
 bool is_charging();
 
+// Battery pack voltage from the INA226 monitor (0 if unavailable). 2S Li-ion.
+float battery_voltage();
+
+// Estimated state of charge [0..100], or -1 if unavailable. Voltage-based, so
+// it reads high while charging and sags under load - it's an estimate.
+int battery_percent();
+
 } // namespace tab5pwr

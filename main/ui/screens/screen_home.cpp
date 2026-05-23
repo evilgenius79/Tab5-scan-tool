@@ -11,6 +11,7 @@
 #include "core/tab5_power.h"
 
 #include <cstdint>   // intptr_t
+#include <cstdio>    // snprintf
 
 namespace {
 
@@ -92,11 +93,24 @@ void screen_home_create(lv_obj_t* parent) {
 
 void screen_home_update(void) {
     if (!g_charge) return;
-    if (tab5pwr::is_charging()) {
-        lv_label_set_text(g_charge, LV_SYMBOL_CHARGE " Charging");
-        lv_obj_set_style_text_color(g_charge, COL_GREEN, 0);
-    } else {
-        lv_label_set_text(g_charge, LV_SYMBOL_BATTERY_FULL " On battery");
-        lv_obj_set_style_text_color(g_charge, COL_TEXT_DIM, 0);
-    }
+    const int pct = tab5pwr::battery_percent();
+    const bool charging = tab5pwr::is_charging();
+    char buf[40];
+
+    // Pick a battery glyph by level (charging always shows the charge bolt).
+    const char* icon = charging ? LV_SYMBOL_CHARGE
+                     : pct < 0   ? LV_SYMBOL_BATTERY_FULL
+                     : pct >= 80 ? LV_SYMBOL_BATTERY_FULL
+                     : pct >= 55 ? LV_SYMBOL_BATTERY_3
+                     : pct >= 30 ? LV_SYMBOL_BATTERY_2
+                     : pct >= 12 ? LV_SYMBOL_BATTERY_1
+                                 : LV_SYMBOL_BATTERY_EMPTY;
+
+    if (pct < 0) snprintf(buf, sizeof(buf), "%s %s", icon,
+                          charging ? "Charging" : "Battery");
+    else         snprintf(buf, sizeof(buf), "%s %d%%%s", icon, pct,
+                          charging ? " +" : "");
+    lv_label_set_text(g_charge, buf);
+    lv_obj_set_style_text_color(g_charge,
+        charging ? COL_GREEN : (pct >= 0 && pct < 15 ? COL_RED : COL_TEXT), 0);
 }
