@@ -148,6 +148,47 @@ void updatePerf() {
 }
 
 // ---------------------------------------------------------------------------
+//  Decode Mode 01 PID 01 (I/M readiness). Data bytes A,B,C,D:
+//    A: bit7 MIL on, bits0-6 stored-DTC count.
+//    B: bit3 ignition type (1=compression/diesel); continuous monitors -
+//       supported in bits0-2, "not complete" in bits4-6.
+//    C/D: non-continuous monitors - C=supported, D=not complete (bit per type).
+// ---------------------------------------------------------------------------
+void decodeReadiness(const uint8_t* d, ReadinessInfo& r) {
+    const uint8_t A = d[0], B = d[1], C = d[2], D = d[3];
+    r.mil_on      = A & 0x80;
+    r.dtc_count   = A & 0x7F;
+    r.compression = B & 0x08;
+    r.mon_count   = 0;
+
+    auto add = [&](const char* name, bool supported, bool not_complete) {
+        if (r.mon_count >= ReadinessInfo::MAX_MON) return;
+        r.mon[r.mon_count].name  = name;
+        r.mon[r.mon_count].state = !supported ? MonState::NotSupported
+                                  : (not_complete ? MonState::NotReady
+                                                  : MonState::Ready);
+        r.mon_count++;
+    };
+
+    // Continuous monitors (byte B).
+    add("Misfire",     B & 0x01, B & 0x10);
+    add("Fuel System", B & 0x02, B & 0x20);
+    add("Components",  B & 0x04, B & 0x40);
+
+    // Non-continuous monitors (C supported / D not-complete), per ignition type.
+    static const char* kSpark[8] = {
+        "Catalyst", "Heated Catalyst", "Evap System", "Secondary Air",
+        "A/C Refrig", "O2 Sensor", "O2 Heater", "EGR/VVT" };
+    static const char* kDiesel[8] = {
+        "NMHC Cat", "NOx/SCR Mon", "(reserved)", "Boost Pressure",
+        "(reserved)", "Exhaust Sensor", "PM Filter", "EGR/VVT" };
+    const char** names = r.compression ? kDiesel : kSpark;
+    for (int i = 0; i < 8; ++i) add(names[i], C & (1 << i), D & (1 << i));
+
+    r.valid = true;
+}
+
+// ---------------------------------------------------------------------------
 //  Apply a UI command. Returns the (possibly changed) desired mode.
 // ---------------------------------------------------------------------------
 void applyCommand(const ObdCommand& cmd) {
@@ -210,6 +251,19 @@ void applyCommand(const ObdCommand& cmd) {
             ESP_LOGW(TAG, "VIN read failed");
         }
         bus.setVehicleInfo(info);
+        break;
+    }
+
+    case CmdType::ReadReadiness: {
+        // Mode 01 PID 01: MIL + stored-DTC count + emissions-monitor readiness.
+        std::string resp = g_link.sendCommand("0101", &ok, 2000);
+        uint8_t d[8];
+        int n = stn::parsePidResponse(resp, 0x01, 0x01, d, sizeof(d));
+        ReadinessInfo r{};
+        if (n >= 4) decodeReadiness(d, r);
+        bus.setReadiness(r);
+        ESP_LOGI(TAG, "readiness: MIL=%d DTCs=%d monitors=%d",
+                 r.mil_on, r.dtc_count, r.mon_count);
         break;
     }
 

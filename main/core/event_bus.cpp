@@ -95,3 +95,20 @@ VehicleInfo EventBus::getVehicleInfo() {
     }
     return copy;
 }
+
+// --- I/M readiness ----------------------------------------------------------
+void EventBus::setReadiness(const ReadinessInfo& info) {
+    if (xSemaphoreTake(veh_mtx_, pdMS_TO_TICKS(50)) == pdTRUE) {
+        readiness_ = info;
+        xSemaphoreGive(veh_mtx_);
+    }
+}
+
+ReadinessInfo EventBus::getReadiness() {
+    ReadinessInfo copy{};
+    if (xSemaphoreTake(veh_mtx_, pdMS_TO_TICKS(50)) == pdTRUE) {
+        copy = readiness_;
+        xSemaphoreGive(veh_mtx_);
+    }
+    return copy;
+}

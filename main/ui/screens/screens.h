@@ -33,3 +33,7 @@ void screen_sniffer_update(void);
 // Screen 6 - Settings (baud, brightness, HS/MS CAN).
 void screen_settings_create(lv_obj_t* parent);
 void screen_settings_update(void);
+
+// Screen 7 - I/M Readiness Monitors (Mode 01 PID 01).
+void screen_readiness_create(lv_obj_t* parent);
+void screen_readiness_update(void);

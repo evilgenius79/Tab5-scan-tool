@@ -39,6 +39,7 @@ enum class CmdType : uint8_t {
     StartPerfRun,    // arm the 0-60 / quarter-mile capture
     Reconnect,       // force USB re-enumeration
     ReadVin,         // OBD Mode 09 PID 02 (vehicle VIN)
+    ReadReadiness,   // OBD Mode 01 PID 01 (MIL + I/M readiness monitors)
 };
 
 struct ObdCommand {
@@ -65,6 +66,27 @@ struct VehicleInfo {
     char manufacturer[28];  // decoded from the WMI (chars 1-3), "" if unknown
     int  model_year;        // decoded from char 10, 0 if unknown
     bool valid;             // true once a VIN has been read and parsed
+};
+
+// -----------------------------------------------------------------------------
+//  I/M readiness (OBD Mode 01 PID 01): MIL status, stored-DTC count, and the
+//  emissions-monitor readiness states - the classic "will it pass smog" view.
+// -----------------------------------------------------------------------------
+enum class MonState : uint8_t { NotSupported = 0, Ready = 1, NotReady = 2 };
+
+struct ReadinessMonitor {
+    const char* name;     // points to a static string literal (safe to copy)
+    MonState    state;
+};
+
+struct ReadinessInfo {
+    bool             valid = false;
+    bool             mil_on = false;       // malfunction indicator lamp
+    uint8_t          dtc_count = 0;        // stored DTC count
+    bool             compression = false;  // true = diesel, false = spark/gas
+    static constexpr int MAX_MON = 11;
+    ReadinessMonitor mon[MAX_MON]{};
+    uint8_t          mon_count = 0;
 };
 
 // -----------------------------------------------------------------------------
@@ -109,6 +131,10 @@ public:
     void        setVehicleInfo(const VehicleInfo& info);
     VehicleInfo getVehicleInfo();
 
+    // --- I/M readiness (guarded by veh_mtx_) --------------------------------
+    void          setReadiness(const ReadinessInfo& info);
+    ReadinessInfo getReadiness();
+
 private:
     EventBus() = default;
 
@@ -126,4 +152,5 @@ private:
 
     SemaphoreHandle_t   veh_mtx_    = nullptr;
     VehicleInfo         vehicle_{};
+    ReadinessInfo       readiness_{};
 };
