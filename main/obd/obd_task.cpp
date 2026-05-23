@@ -189,12 +189,12 @@ void applyCommand(const ObdCommand& cmd) {
     }
 
     case CmdType::ReadVin: {
-        // VIN is a multi-frame ISO-TP reply. Drop CAN headers for the request
-        // so the adapter's reassembled output is clean, then restore them (the
-        // sniffer needs ATH1).
-        g_link.sendCommand(STN_CMD_HEADERS_OFF, &ok);
-        std::string resp = g_link.sendCommand(OBD_MODE_VIN, &ok);
-        g_link.sendCommand(STN_CMD_HEADERS_ON, &ok);
+        // VIN is a multi-frame ISO-TP reply. Headers are already off globally
+        // (set in initialize()), which keeps the reassembled output clean - do
+        // NOT turn them back on or the single-frame PID polling parser breaks.
+        // Give it a long timeout: the multi-frame reply (and any protocol
+        // re-search) takes well over the 1s default.
+        std::string resp = g_link.sendCommand(OBD_MODE_VIN, &ok, 5000);
 
         VehicleInfo info{};
         if (ok && stn::parseVin(resp, info.vin)) {
