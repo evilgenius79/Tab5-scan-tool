@@ -8,6 +8,7 @@
 #include "ui/screens/screens.h"
 #include "ui/ui_theme.h"
 #include "core/event_bus.h"
+#include "obd/custom_pids.h"
 
 #include <cstdio>
 
@@ -76,4 +77,16 @@ void screen_livedata_update(void) {
     set(R_AFR,      "%.1f",      t.afr);
     set(R_BARO,     "%.0f kPa",  t.baro_kpa);
     set(R_BATT,     "%.2f V",    t.battery_v);
+
+    // Append manufacturer/custom PIDs (loaded from SD or the Ford defaults).
+    size_t cc = custpid::count();
+    lv_table_set_row_count(g_table, R_COUNT + 1 + cc);
+    for (size_t i = 0; i < cc; ++i) {
+        const CustomPid& c = custpid::def(i);
+        lv_table_set_cell_value(g_table, R_COUNT + 1 + i, 0, c.name);
+        float v;
+        if (custpid::getValue(i, v)) snprintf(b, sizeof(b), "%.2f %s", v, c.unit);
+        else                          snprintf(b, sizeof(b), "--");
+        lv_table_set_cell_value(g_table, R_COUNT + 1 + i, 1, b);
+    }
 }

@@ -16,6 +16,7 @@ idf_component_register(
         # --- obd protocol layer ---------------------------------------------
         "obd/stn_parser.cpp"
         "obd/obd_task.cpp"
+        "obd/custom_pids.cpp"
         "obd/dtc_lookup.cpp"
         "obd/vin_decode.cpp"
 

@@ -6,6 +6,7 @@
 #include "obd/stn_parser.h"
 #include "obd/pid_definitions.h"
 #include "obd/vin_decode.h"
+#include "obd/custom_pids.h"
 
 #include "usb/usb_host_cdc.h"
 #include "usb/obd_link.h"
@@ -109,6 +110,30 @@ void pollPid(const PidDef& pid) {
         pid.decode(data, (uint8_t)n, g_telem);
         g_telem.last_good_pid_us = esp_timer_get_time();   // freshness for UI/diag
     }
+}
+
+// ---------------------------------------------------------------------------
+//  Poll one user/profile-defined custom PID and store its scaled value.
+// ---------------------------------------------------------------------------
+void pollCustom(size_t idx) {
+    const CustomPid& c = custpid::def(idx);
+    bool ok = false;
+    std::string resp = g_link.sendCommand(c.request, &ok);
+    if (!ok || stn::isErrorResponse(resp)) return;
+
+    uint8_t data[16];
+    int n = stn::parsePidResponse(resp, c.mode, c.pid, data, sizeof(data));
+    if (n < (int)c.bytes || c.bytes == 0) return;
+
+    int32_t raw;
+    if (c.bytes >= 2) {
+        raw = (data[0] << 8) | data[1];
+        if (c.is_signed && (raw & 0x8000)) raw -= 0x10000;
+    } else {
+        raw = data[0];
+        if (c.is_signed && (raw & 0x80)) raw -= 0x100;
+    }
+    custpid::setValue(idx, raw * c.scale + c.offset);
 }
 
 // ---------------------------------------------------------------------------
@@ -429,6 +454,7 @@ void obdTask(void*) {
     }
 
     size_t   pid_idx     = 0;
+    size_t   cust_idx    = 0;
     uint32_t poll_count  = 0;
     uint64_t hz_window   = esp_timer_get_time();
 
@@ -444,6 +470,7 @@ void obdTask(void*) {
             if (g_link.initialize()) {
                 bus.link.store(LinkState::Online);
                 bus.current_baud.store(OBD_DEFAULT_BAUD);
+                custpid::load();   // SD custom_pids.csv or built-in Ford defaults
             } else {
                 bus.link.store(LinkState::Error);
                 vTaskDelay(pdMS_TO_TICKS(500));
@@ -469,6 +496,11 @@ void obdTask(void*) {
         case ObdMode::Polling: {
             pollPid(kPidCatalog[pid_idx]);
             pid_idx = (pid_idx + 1) % kPidCount;
+            // Interleave one custom/profile PID per loop (knock, CACT, ...).
+            if (custpid::count() > 0) {
+                pollCustom(cust_idx);
+                cust_idx = (cust_idx + 1) % custpid::count();
+            }
             poll_count++;
             updatePerf();
             break;
