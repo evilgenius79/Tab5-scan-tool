@@ -26,6 +26,24 @@ void scan_cb(lv_event_t*) {
     lv_label_set_text(g_status, LV_SYMBOL_REFRESH " Scanning all modules...");
 }
 
+void clear_confirm_cb(lv_event_t* e) {
+    auto* mbox = (lv_obj_t*)lv_event_get_user_data(e);
+    ObdCommand c{ CmdType::ClearModuleDtcs, 0, 0 };
+    EventBus::instance().sendCommand(c, 0);
+    lv_label_set_text(g_status, LV_SYMBOL_TRASH " Clearing all modules...");
+    lv_msgbox_close(mbox);
+}
+
+void clear_cb(lv_event_t*) {
+    lv_obj_t* mbox = lv_msgbox_create(nullptr);
+    lv_msgbox_add_title(mbox, "Clear ALL module codes?");
+    lv_msgbox_add_text(mbox, "Erases DTCs in every module (incl. airbag/ABS) and "
+                             "freeze-frame data. Only do this with the engine on.");
+    lv_obj_t* ok = lv_msgbox_add_footer_button(mbox, "Clear All");
+    lv_msgbox_add_close_button(mbox);
+    lv_obj_add_event_cb(ok, clear_confirm_cb, LV_EVENT_CLICKED, mbox);
+}
+
 } // namespace
 
 void screen_modules_create(lv_obj_t* parent) {
@@ -49,6 +67,15 @@ void screen_modules_create(lv_obj_t* parent) {
     lv_obj_t* sl = lv_label_create(sb);
     lv_label_set_text(sl, LV_SYMBOL_REFRESH " SCAN ALL MODULES");
     lv_obj_center(sl);
+
+    lv_obj_t* cb = lv_btn_create(bar);
+    lv_obj_add_style(cb, &st_accent_btn, 0);
+    lv_obj_set_style_border_color(cb, COL_RED, 0);
+    lv_obj_set_style_text_color(cb, COL_RED, 0);
+    lv_obj_add_event_cb(cb, clear_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* cl = lv_label_create(cb);
+    lv_label_set_text(cl, LV_SYMBOL_TRASH " CLEAR ALL");
+    lv_obj_center(cl);
 
     g_status = lv_label_create(bar);
     lv_obj_add_style(g_status, &st_label_dim, 0);

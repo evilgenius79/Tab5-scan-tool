@@ -222,6 +222,27 @@ void decodeReadiness(const uint8_t* d, ReadinessInfo& r) {
 }
 
 // ---------------------------------------------------------------------------
+//  Ford control-module map for enhanced UDS access (response header = req+8).
+//  Used by both the module DTC scan (0x19) and clear (0x14).
+// ---------------------------------------------------------------------------
+struct ModuleAddr { const char* name; uint16_t req; };
+const ModuleAddr g_fordModules[] = {
+    { "PCM (Engine)",   0x7E0 }, { "TCM (Trans)",    0x7E1 },
+    { "ABS",            0x760 }, { "Airbag (RCM)",   0x737 },
+    { "BCM (Body)",     0x726 }, { "Cluster (IPC)",  0x720 },
+    { "Pwr Steering",   0x730 }, { "HVAC",           0x733 },
+    { "Park Aid (PAM)", 0x736 }, { "Restraints",     0x727 },
+};
+constexpr size_t kFordModuleCount = sizeof(g_fordModules) / sizeof(g_fordModules[0]);
+
+// Restore OBD functional broadcast addressing after physical-module access.
+static void restoreFunctionalAddressing() {
+    bool ok = false;
+    g_link.sendCommand("ATAR", &ok);     // automatic receive address
+    g_link.sendCommand("ATSH7DF", &ok);  // OBD functional request header
+}
+
+// ---------------------------------------------------------------------------
 //  Apply a UI command. Returns the (possibly changed) desired mode.
 // ---------------------------------------------------------------------------
 void applyCommand(const ObdCommand& cmd) {
@@ -317,18 +338,10 @@ void applyCommand(const ObdCommand& cmd) {
     }
 
     case CmdType::ScanModules: {
-        // Enhanced multi-module DTC scan. Address each control module directly
-        // by its CAN header and run UDS ReadDTCInformation (0x19 0x02 0xFF).
-        // Module addresses below are the Ford 11-bit set (response = request+8);
-        // other makes need their own map (future per-vehicle profile).
-        static const struct { const char* name; uint16_t req; } kModules[] = {
-            { "PCM (Engine)",   0x7E0 }, { "TCM (Trans)",    0x7E1 },
-            { "ABS",            0x760 }, { "Airbag (RCM)",   0x737 },
-            { "BCM (Body)",     0x726 }, { "Cluster (IPC)",  0x720 },
-            { "Pwr Steering",   0x730 }, { "HVAC",           0x733 },
-            { "Park Aid (PAM)", 0x736 }, { "Restraints",     0x727 },
-        };
-        const size_t nmod = sizeof(kModules) / sizeof(kModules[0]);
+        // Enhanced multi-module DTC scan. Address each Ford control module
+        // directly by its CAN header and run UDS ReadDTCInformation (19 02 FF).
+        const ModuleAddr* kModules = g_fordModules;
+        const size_t nmod = kFordModuleCount;
 
         bus.module_scan_active.store(true);
         ModuleResult results[MAX_MODULES];
@@ -358,13 +371,35 @@ void applyCommand(const ObdCommand& cmd) {
             mcount++;
         }
 
-        // Restore functional broadcast addressing so normal PID polling works.
-        g_link.sendCommand("ATAR", &ok);     // automatic receive address
-        g_link.sendCommand("ATSH7DF", &ok);  // OBD functional request header
-
+        restoreFunctionalAddressing();   // so normal PID polling resumes
         bus.setModuleResults(results, mcount);
         bus.module_scan_active.store(false);
         ESP_LOGI(TAG, "module scan complete (%u modules probed)", (unsigned)mcount);
+        break;
+    }
+
+    case CmdType::ClearModuleDtcs: {
+        // Clear DTCs in every Ford module via UDS ClearDiagnosticInformation
+        // (service 0x14, group 0xFFFFFF = all). Then re-scan to refresh the UI.
+        bus.module_scan_active.store(true);
+        char cmd[16];
+        for (size_t m = 0; m < kFordModuleCount; ++m) {
+            snprintf(cmd, sizeof(cmd), "ATSH%03X", g_fordModules[m].req);
+            g_link.sendCommand(cmd, &ok);
+            snprintf(cmd, sizeof(cmd), "ATCRA%03X", (g_fordModules[m].req + 8) & 0xFFF);
+            g_link.sendCommand(cmd, &ok);
+            std::string resp = g_link.sendCommand("14FFFFFF", &ok, 1500);
+            ESP_LOGI(TAG, "clear %-14s %03X -> '%s'", g_fordModules[m].name,
+                     g_fordModules[m].req, resp.c_str());
+        }
+        restoreFunctionalAddressing();
+        // Also clear the standard emissions DTCs / MIL on the PCM.
+        g_link.sendCommand(OBD_MODE_CLEAR_DTC, &ok);
+        bus.module_scan_active.store(false);
+        ESP_LOGI(TAG, "module clear complete");
+        // Trigger a fresh scan so the screen reflects cleared state.
+        ObdCommand rescan{ CmdType::ScanModules, 0, 0 };
+        bus.sendCommand(rescan, 0);
         break;
     }
 

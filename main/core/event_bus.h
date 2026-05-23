@@ -41,6 +41,7 @@ enum class CmdType : uint8_t {
     ReadVin,         // OBD Mode 09 PID 02 (vehicle VIN)
     ReadReadiness,   // OBD Mode 01 PID 01 (MIL + I/M readiness monitors)
     ScanModules,     // enhanced: UDS 0x19 read-DTC across all known modules
+    ClearModuleDtcs, // enhanced: UDS 0x14 clear-DTC across all known modules
 };
 
 struct ObdCommand {
