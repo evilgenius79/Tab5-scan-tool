@@ -10,6 +10,10 @@
 
 #include "lvgl.h"
 
+// Screen 0 - Home menu (function cards that jump to each screen).
+void screen_home_create(lv_obj_t* parent);
+void screen_home_update(void);
+
 // Screen 1 - Live Telemetry Dash (RPM/Boost gauges, knock/AFR sparklines).
 void screen_dash_create(lv_obj_t* parent);
 void screen_dash_update(void);

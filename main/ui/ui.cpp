@@ -17,6 +17,7 @@ static int       g_active  = 0;
 
 // Tab labels with glyphs (Montserrat symbol font) for a polished nav rail.
 static const char* kTabNames[(int)ScreenId::_Count] = {
+    LV_SYMBOL_HOME    " HOME",
     LV_SYMBOL_CHARGE  " DASH",
     LV_SYMBOL_GPS     " PERF",
     LV_SYMBOL_WARNING " DTC",
@@ -34,6 +35,13 @@ static void tab_changed_cb(lv_event_t* e) {
 }
 
 int ui_active_screen() { return g_active; }
+
+void ui_goto_screen(int screen_index) {
+    if (g_tabview) {
+        lv_tabview_set_active(g_tabview, (uint32_t)screen_index, LV_ANIM_ON);
+        g_active = screen_index;
+    }
+}
 
 void ui_init() {
     // --- Display + LVGL port -------------------------------------------------
@@ -85,6 +93,9 @@ void ui_init() {
 
     // --- Build each screen into its tab page --------------------------------
     lv_obj_t* page;
+    page = lv_tabview_add_tab(g_tabview, kTabNames[(int)ScreenId::Home]);
+    screen_home_create(page);
+
     page = lv_tabview_add_tab(g_tabview, kTabNames[(int)ScreenId::Dash]);
     screen_dash_create(page);
 

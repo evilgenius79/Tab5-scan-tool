@@ -26,6 +26,7 @@ idf_component_register(
         "ui/ui.cpp"
         "ui/ui_theme.cpp"
         "ui/ui_task.cpp"
+        "ui/screens/screen_home.cpp"
         "ui/screens/screen_dash.cpp"
         "ui/screens/screen_performance.cpp"
         "ui/screens/screen_diagnostics.cpp"

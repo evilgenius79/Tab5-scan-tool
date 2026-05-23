@@ -10,7 +10,8 @@
 
 // Top-level screens, in tab order.
 enum class ScreenId : int {
-    Dash = 0,      // live telemetry: radial gauges + sparklines
+    Home = 0,      // function-card main menu
+    Dash,          // live telemetry: radial gauges + sparklines
     Performance,   // 0-60 / quarter-mile timers
     Diagnostics,   // DTC table read/clear
     Readiness,     // I/M emissions readiness monitors
@@ -30,3 +31,7 @@ void ui_task_start();
 
 // Returns the index of the currently visible tab (for update gating).
 int ui_active_screen();
+
+// Switch the active tab to `screen_index` (a ScreenId value). Used by the home
+// menu cards to jump to a function. Safe to call from the LVGL task.
+void ui_goto_screen(int screen_index);
