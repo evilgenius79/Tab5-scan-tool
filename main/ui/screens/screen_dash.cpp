@@ -106,9 +106,9 @@ void screen_dash_create(lv_obj_t* parent) {
     lv_obj_set_grid_cell(p, LV_GRID_ALIGN_STRETCH, 1, 1, LV_GRID_ALIGN_STRETCH, 0, 1);
     g_boost = make_gauge(p, "PSI", COL_MAGENTA, 35);
 
-    p = ui_make_panel(parent, "KNOCK RETARD");
+    p = ui_make_panel(parent, "IGN TIMING (deg)");
     lv_obj_set_grid_cell(p, LV_GRID_ALIGN_STRETCH, 0, 1, LV_GRID_ALIGN_STRETCH, 1, 1);
-    g_knock_ser = make_spark(p, COL_RED, &g_knock_chart, 0, 15);
+    g_knock_ser = make_spark(p, COL_CYAN, &g_knock_chart, -10, 50);
 
     p = ui_make_panel(parent, "AFR (LAMBDA)");
     lv_obj_set_grid_cell(p, LV_GRID_ALIGN_STRETCH, 1, 1, LV_GRID_ALIGN_STRETCH, 1, 1);
@@ -130,11 +130,10 @@ void screen_dash_update(void) {
     snprintf(buf, sizeof(buf), "%.1f", t.boost_psi);
     lv_label_set_text(g_boost.value, buf);
 
-    // Knock sparkline; recolor the line as retard worsens.
-    lv_chart_set_next_value(g_knock_chart, g_knock_ser, (int)t.knock_retard_deg);
-    lv_color_t kc = t.knock_retard_deg >= 6 ? COL_RED
-                  : t.knock_retard_deg >= 2 ? COL_AMBER : COL_GREEN;
-    lv_chart_set_series_color(g_knock_chart, g_knock_ser, kc);
+    // Ignition-timing sparkline (standard PID 0E - universal). Real knock
+    // retard needs a per-vehicle manufacturer PID and will replace this once
+    // the Ford profile lands.
+    lv_chart_set_next_value(g_knock_chart, g_knock_ser, (int)t.ignition_adv_deg);
 
     // AFR sparkline (stored as AFR*10 for integer y-axis).
     lv_chart_set_next_value(g_afr_chart, g_afr_ser, (int)(t.afr * 10));

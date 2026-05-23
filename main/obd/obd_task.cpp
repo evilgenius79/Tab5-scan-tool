@@ -55,11 +55,19 @@ void pollPid(const PidDef& pid) {
     std::string resp;
 
     if (strncmp(pid.request, "ATRV", 4) == 0) {
-        // Battery voltage is an adapter command, not an OBD request.
+        // Battery voltage is an adapter command (voltage at OBD pin 16), not an
+        // OBD request. Skip any non-numeric prefix before parsing "14.2V".
         resp = g_link.sendCommand("ATRV", &ok);
-        if (ok && !resp.empty()) {
-            float v = strtof(resp.c_str(), nullptr);   // "14.2V"
-            if (v > 1.0f) g_telem.battery_v = v;
+        const char* p = resp.c_str();
+        while (*p && (*p < '0' || *p > '9') && *p != '.') ++p;
+        float v = strtof(p, nullptr);
+        if (ok && v > 1.0f) g_telem.battery_v = v;
+        static uint64_t s_batt_log = 0;
+        const uint64_t bnow = esp_timer_get_time();
+        if (bnow - s_batt_log > 2000000) {   // ~1 line / 2s
+            ESP_LOGI("Poll", "Battery       req=ATRV -> '%s' = %.2fV",
+                     resp.c_str(), v);
+            s_batt_log = bnow;
         }
         return;
     }

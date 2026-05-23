@@ -17,6 +17,8 @@ struct TelemetryState {
     float    intake_air_c;        // IAT                      [degC]
     float    map_kpa;             // manifold abs pressure    [kPa]
     float    throttle_pct;        // throttle position        [%]
+    float    engine_load;         // calculated engine load   [%]
+    float    baro_kpa;            // barometric pressure      [kPa]
     float    afr;                 // air/fuel ratio (from O2/wideband)
     float    battery_v;           // control module voltage   [V]
 

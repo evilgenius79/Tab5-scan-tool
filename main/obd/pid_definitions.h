@@ -58,6 +58,16 @@ inline void map_kpa(const uint8_t* d, uint8_t n, TelemetryState& t) {
 inline void throttle(const uint8_t* d, uint8_t n, TelemetryState& t) {
     if (n >= 1) t.throttle_pct = d[0] * 100.0f / 255.0f;
 }
+inline void load(const uint8_t* d, uint8_t n, TelemetryState& t) {
+    if (n >= 1) t.engine_load = d[0] * 100.0f / 255.0f;   // calculated load [%]
+}
+inline void baro(const uint8_t* d, uint8_t n, TelemetryState& t) {
+    if (n >= 1) {
+        t.baro_kpa = d[0];                                // absolute baro [kPa]
+        // With a real baro reading, boost = MAP - baro is exact.
+        if (t.map_kpa > 0) t.boost_psi = (t.map_kpa - t.baro_kpa) * 0.1450377f;
+    }
+}
 inline void battery(const uint8_t* d, uint8_t n, TelemetryState& t) {
     if (n >= 2) t.battery_v = ((d[0] << 8) | d[1]) / 1000.0f; // module voltage
 }
@@ -100,13 +110,16 @@ static const PidDef kPidCatalog[] = {
     { "IgnAdv",         "010E",   1,     false,    dec::ign_adv    },
     { "Coolant",        "0105",   1,     false,    dec::coolant    },
     { "IAT",            "010F",   1,     false,    dec::iat        },
+    { "EngLoad",        "0104",   1,     false,    dec::load       },
     { "AFR",            "0144",   2,     false,    dec::afr        },
+    { "Baro",           "0133",   1,     false,    dec::baro       },
     { "Battery",        "ATRV",   2,     false,    dec::battery    },
 
-    // Enhanced (header/scaling are placeholders - retune!).
-    { "KnockRetard",    "22F40C", 1,     true,     dec::knock_retard },
-    { "ChargeAirTemp",  "22F445", 1,     true,     dec::charge_air   },
-    { "HPFP",           "22F446", 2,     true,     dec::hpfp         },
+    // NOTE: real manufacturer parameters (knock retard, charge-air temp, HPFP)
+    // are NOT standard OBD PIDs - they need a per-vehicle profile (e.g. Ford
+    // EcoBoost UDS PIDs). The old 22F40C/F445/F446 entries here were just the
+    // UDS *mirror* of standard PIDs (DID 0xF4xx == OBD PID 0xxx) and reported
+    // mislabeled data, so they were removed. See the vehicle-profile work.
 };
 
 static constexpr size_t kPidCount = sizeof(kPidCatalog) / sizeof(kPidCatalog[0]);

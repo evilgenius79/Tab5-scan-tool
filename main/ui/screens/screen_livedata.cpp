@@ -17,14 +17,14 @@ lv_obj_t* g_table = nullptr;
 
 // One row per parameter. The order here is the display order.
 enum Row {
-    R_RPM, R_SPEED, R_MAP, R_BOOST, R_THROTTLE, R_IGN, R_COOLANT, R_IAT,
-    R_CACT, R_AFR, R_KNOCK, R_HPFP, R_BATT, R_COUNT
+    R_RPM, R_SPEED, R_MAP, R_BOOST, R_THROTTLE, R_LOAD, R_IGN, R_COOLANT,
+    R_IAT, R_AFR, R_BARO, R_BATT, R_COUNT
 };
 
 const char* kNames[R_COUNT] = {
-    "Engine RPM", "Vehicle Speed", "MAP", "Boost", "Throttle", "Ignition Adv",
-    "Coolant Temp", "Intake Air Temp", "Charge Air Temp", "AFR",
-    "Knock Retard", "HPFP Pressure", "Battery",
+    "Engine RPM", "Vehicle Speed", "MAP", "Boost", "Throttle", "Engine Load",
+    "Ignition Adv", "Coolant Temp", "Intake Air Temp", "AFR",
+    "Barometric", "Battery",
 };
 
 } // namespace
@@ -69,12 +69,11 @@ void screen_livedata_update(void) {
     set(R_MAP,      "%.0f kPa",  t.map_kpa);
     set(R_BOOST,    "%.1f psi",  t.boost_psi);
     set(R_THROTTLE, "%.0f %%",   t.throttle_pct);
+    set(R_LOAD,     "%.0f %%",   t.engine_load);
     set(R_IGN,      "%.1f deg",  t.ignition_adv_deg);
     set(R_COOLANT,  "%.0f C",    t.coolant_c);
     set(R_IAT,      "%.0f C",    t.intake_air_c);
-    set(R_CACT,     "%.0f C",    t.charge_air_c);
     set(R_AFR,      "%.1f",      t.afr);
-    set(R_KNOCK,    "%.2f deg",  t.knock_retard_deg);
-    set(R_HPFP,     "%.1f bar",  t.hpfp_pressure_bar);
+    set(R_BARO,     "%.0f kPa",  t.baro_kpa);
     set(R_BATT,     "%.2f V",    t.battery_v);
 }
