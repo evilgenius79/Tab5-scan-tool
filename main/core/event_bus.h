@@ -160,7 +160,8 @@ public:
     // --- Module scan results (guarded by veh_mtx_) --------------------------
     void   setModuleResults(const ModuleResult* mods, size_t count);
     size_t getModuleResults(ModuleResult* out, size_t max);
-    std::atomic<bool> module_scan_active{false};   // true while a scan runs
+    std::atomic<bool> module_scan_active{false};   // true while a module scan runs
+    std::atomic<bool> dtc_read_active{false};      // true while a DTC read runs
 
 private:
     EventBus() = default;

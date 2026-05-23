@@ -20,6 +20,8 @@ lv_obj_t* g_status = nullptr;
 lv_obj_t* g_vin    = nullptr;
 size_t    g_shown  = (size_t)-1;   // last rendered count (avoids needless redraw)
 bool      g_vin_shown = false;     // whether a VIN has been rendered yet
+bool      g_reading = false;       // a READ is in progress (for completion text)
+bool      g_saw_active = false;    // observed the OBD task's read flag go true
 
 void vin_cb(lv_event_t*) {
     ObdCommand c{ CmdType::ReadVin, 0, 0 };
@@ -34,8 +36,10 @@ void read_cb(lv_event_t*) {
     // Load the SD description database (if a card with dtc_db.csv is present)
     // now, on this user action, so meanings are ready when the codes arrive.
     dtc::ensureLoaded();
-    lv_label_set_text(g_status, "Reading DTCs...");
+    lv_label_set_text(g_status, LV_SYMBOL_REFRESH " Reading DTCs...");
     g_shown = (size_t)-1;          // force refresh on next update
+    g_reading = true;
+    g_saw_active = false;
 }
 
 void clear_confirm_cb(lv_event_t* e) {
@@ -127,6 +131,13 @@ void screen_diagnostics_create(lv_obj_t* parent) {
 }
 
 void screen_diagnostics_update(void) {
+    // Detect READ completion via the OBD task's flag (true while reading) so we
+    // can show a clear "complete" message even when there are zero codes.
+    bool active = EventBus::instance().dtc_read_active.load();
+    if (active) g_saw_active = true;
+    const bool just_done = (g_reading && g_saw_active && !active);
+    if (just_done) g_reading = false;
+
     // Refresh the VIN line once a read has produced a result.
     if (!g_vin_shown) {
         VehicleInfo v = EventBus::instance().getVehicleInfo();
@@ -148,7 +159,17 @@ void screen_diagnostics_update(void) {
 
     DtcRecord recs[MAX_DTCS];
     size_t n = EventBus::instance().getDtcs(recs, MAX_DTCS);
-    if (n == g_shown) return;            // nothing changed
+
+    // Announce completion (covers the zero-codes case where the table is same).
+    if (just_done) {
+        char s[44];
+        if (n == 0) snprintf(s, sizeof(s), LV_SYMBOL_OK " Read complete - no codes");
+        else        snprintf(s, sizeof(s), LV_SYMBOL_OK " Read complete - %u code%s",
+                             (unsigned)n, n == 1 ? "" : "s");
+        lv_label_set_text(g_status, s);
+    }
+
+    if (n == g_shown && !just_done) return;   // nothing changed
     g_shown = n;
 
     lv_table_set_row_count(g_table, n + 1);

@@ -132,7 +132,10 @@ void writeFrameRow(const can_frame_t& f) {
 }
 
 void maybeFlush() {
-    if (++g_rows % LOG_FLUSH_EVERY_N_ROWS == 0) fflush(g_file);
+    if (++g_rows % LOG_FLUSH_EVERY_N_ROWS == 0) {
+        fflush(g_file);
+        fsync(fileno(g_file));   // commit FAT entry so key-off doesn't lose the file
+    }
 }
 
 void loggerTask(void*) {
