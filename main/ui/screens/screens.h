@@ -49,3 +49,7 @@ void screen_vehicle_update(void);
 // Screen 9 - Live Data list (all decoded parameters in one table).
 void screen_livedata_create(lv_obj_t* parent);
 void screen_livedata_update(void);
+
+// Screen 10 - Module scan (enhanced UDS multi-module DTC read).
+void screen_modules_create(lv_obj_t* parent);
+void screen_modules_update(void);

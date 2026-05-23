@@ -20,6 +20,7 @@ const MenuItem kItems[] = {
     { LV_SYMBOL_EYE_OPEN, "Live Data",     ScreenId::LiveData,    COL_CYAN    },
     { LV_SYMBOL_GPS,      "Performance",   ScreenId::Performance, COL_MAGENTA },
     { LV_SYMBOL_WARNING,  "Trouble Codes", ScreenId::Diagnostics, COL_AMBER   },
+    { LV_SYMBOL_WARNING,  "Module Scan",   ScreenId::Modules,     COL_RED     },
     { LV_SYMBOL_OK,       "I/M Readiness", ScreenId::Readiness,   COL_GREEN   },
     { LV_SYMBOL_LIST,     "Vehicle Info",  ScreenId::Vehicle,     COL_CYAN    },
     { LV_SYMBOL_SD_CARD,  "Data Logging",  ScreenId::Logging,     COL_GREEN   },

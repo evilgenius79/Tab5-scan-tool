@@ -198,6 +198,40 @@ bool parseVin(const std::string& resp, char* out) {
 }
 
 // ---------------------------------------------------------------------------
+//  UDS ReadDTCInformation (0x19 / 0x02). Response: 59 02 <availMask> then
+//  4-byte records: 3 DTC bytes + 1 status byte. The first two DTC bytes encode
+//  the P/C/B/U code exactly like OBD; the third is the failure-type byte (FTB),
+//  appended as "-NN".
+// ---------------------------------------------------------------------------
+size_t parseUdsDtcs(const std::string& resp, DtcRecord* out, size_t max) {
+    if (isErrorResponse(resp)) return 0;
+    auto bytes = hexBytes(resp);
+
+    // Find the 59 02 positive-response echo, then skip the availability byte.
+    size_t i = 0;
+    for (; i + 1 < bytes.size(); ++i)
+        if (bytes[i] == 0x59 && bytes[i + 1] == 0x02) break;
+    if (i + 1 >= bytes.size()) return 0;
+    i += 3;   // skip 59, 02, availability-mask
+
+    static const char domain[4] = { 'P', 'C', 'B', 'U' };
+    size_t count = 0;
+    for (; i + 2 < bytes.size() && count < max; i += 4) {  // 3 DTC + 1 status
+        uint16_t raw = (bytes[i] << 8) | bytes[i + 1];
+        uint8_t  ftb = bytes[i + 2];
+        if (raw == 0) continue;
+        DtcRecord& r = out[count];
+        r.code[0] = domain[(raw >> 14) & 0x3];
+        r.code[1] = '0' + ((raw >> 12) & 0x3);
+        snprintf(&r.code[2], 4, "%03X", raw & 0x0FFF);
+        (void)ftb;                       // failure-type byte available if needed
+        r.status = DTC_STORED;
+        count++;
+    }
+    return count;
+}
+
+// ---------------------------------------------------------------------------
 //  Generic Mode 09 ASCII reply (CALID PID 04, ECU name PID 0A, ...). Same
 //  framing as VIN: find the 49 <pid> echo, skip the NODI count byte, then copy
 //  printable ASCII. NUL bytes (CALID field padding) are skipped; a run of other

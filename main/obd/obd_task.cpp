@@ -291,6 +291,58 @@ void applyCommand(const ObdCommand& cmd) {
         break;
     }
 
+    case CmdType::ScanModules: {
+        // Enhanced multi-module DTC scan. Address each control module directly
+        // by its CAN header and run UDS ReadDTCInformation (0x19 0x02 0xFF).
+        // Module addresses below are the Ford 11-bit set (response = request+8);
+        // other makes need their own map (future per-vehicle profile).
+        static const struct { const char* name; uint16_t req; } kModules[] = {
+            { "PCM (Engine)",   0x7E0 }, { "TCM (Trans)",    0x7E1 },
+            { "ABS",            0x760 }, { "Airbag (RCM)",   0x737 },
+            { "BCM (Body)",     0x726 }, { "Cluster (IPC)",  0x720 },
+            { "Pwr Steering",   0x730 }, { "HVAC",           0x733 },
+            { "Park Aid (PAM)", 0x736 }, { "Restraints",     0x727 },
+        };
+        const size_t nmod = sizeof(kModules) / sizeof(kModules[0]);
+
+        bus.module_scan_active.store(true);
+        ModuleResult results[MAX_MODULES];
+        size_t mcount = 0;
+        char cmd[16];
+
+        for (size_t m = 0; m < nmod && mcount < MAX_MODULES; ++m) {
+            // Point the adapter at this module: TX header + RX filter.
+            snprintf(cmd, sizeof(cmd), "ATSH%03X", kModules[m].req);
+            g_link.sendCommand(cmd, &ok);
+            snprintf(cmd, sizeof(cmd), "ATCRA%03X", (kModules[m].req + 8) & 0xFFF);
+            g_link.sendCommand(cmd, &ok);
+
+            // UDS ReadDTCInformation, reportDTCByStatusMask, mask 0xFF (all).
+            std::string resp = g_link.sendCommand("1902FF", &ok, 1500);
+
+            ModuleResult& r = results[mcount];
+            memset(&r, 0, sizeof(r));
+            snprintf(r.name, sizeof(r.name), "%s", kModules[m].name);
+            r.req_id    = kModules[m].req;
+            r.responded = ok && !stn::isErrorResponse(resp);
+            r.dtc_count = r.responded
+                        ? (uint8_t)stn::parseUdsDtcs(resp, r.dtcs, 8) : 0;
+            ESP_LOGI(TAG, "module %-14s %03X: %s, %u DTCs", r.name,
+                     r.req_id, r.responded ? "responded" : "no response",
+                     r.dtc_count);
+            mcount++;
+        }
+
+        // Restore functional broadcast addressing so normal PID polling works.
+        g_link.sendCommand("ATAR", &ok);     // automatic receive address
+        g_link.sendCommand("ATSH7DF", &ok);  // OBD functional request header
+
+        bus.setModuleResults(results, mcount);
+        bus.module_scan_active.store(false);
+        ESP_LOGI(TAG, "module scan complete (%u modules probed)", (unsigned)mcount);
+        break;
+    }
+
     case CmdType::SetBaud:
         g_link.setBaud(cmd.arg_u32);
         bus.current_baud.store(cmd.arg_u32);

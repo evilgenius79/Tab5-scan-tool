@@ -40,6 +40,7 @@ enum class CmdType : uint8_t {
     Reconnect,       // force USB re-enumeration
     ReadVin,         // OBD Mode 09 PID 02 (vehicle VIN)
     ReadReadiness,   // OBD Mode 01 PID 01 (MIL + I/M readiness monitors)
+    ScanModules,     // enhanced: UDS 0x19 read-DTC across all known modules
 };
 
 struct ObdCommand {
@@ -85,6 +86,19 @@ struct ReadinessMonitor {
     const char* name;     // points to a static string literal (safe to copy)
     MonState    state;
 };
+
+// -----------------------------------------------------------------------------
+//  Enhanced multi-module DTC scan (UDS service 0x19). One result per control
+//  module addressed directly by its CAN header.
+// -----------------------------------------------------------------------------
+struct ModuleResult {
+    char      name[18];
+    uint16_t  req_id;            // request CAN header (e.g. 0x7E0, 0x760)
+    bool      responded;         // module answered the UDS request
+    uint8_t   dtc_count;
+    DtcRecord dtcs[8];           // up to 8 codes shown per module
+};
+static constexpr size_t MAX_MODULES = 14;
 
 struct ReadinessInfo {
     bool             valid = false;
@@ -142,6 +156,11 @@ public:
     void          setReadiness(const ReadinessInfo& info);
     ReadinessInfo getReadiness();
 
+    // --- Module scan results (guarded by veh_mtx_) --------------------------
+    void   setModuleResults(const ModuleResult* mods, size_t count);
+    size_t getModuleResults(ModuleResult* out, size_t max);
+    std::atomic<bool> module_scan_active{false};   // true while a scan runs
+
 private:
     EventBus() = default;
 
@@ -160,4 +179,6 @@ private:
     SemaphoreHandle_t   veh_mtx_    = nullptr;
     VehicleInfo         vehicle_{};
     ReadinessInfo       readiness_{};
+    ModuleResult        modules_[MAX_MODULES]{};
+    size_t              module_count_ = 0;
 };

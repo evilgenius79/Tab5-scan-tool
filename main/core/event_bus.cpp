@@ -112,3 +112,23 @@ ReadinessInfo EventBus::getReadiness() {
     }
     return copy;
 }
+
+// --- Module scan results ----------------------------------------------------
+void EventBus::setModuleResults(const ModuleResult* mods, size_t count) {
+    if (count > MAX_MODULES) count = MAX_MODULES;
+    if (xSemaphoreTake(veh_mtx_, pdMS_TO_TICKS(50)) == pdTRUE) {
+        memcpy(modules_, mods, count * sizeof(ModuleResult));
+        module_count_ = count;
+        xSemaphoreGive(veh_mtx_);
+    }
+}
+
+size_t EventBus::getModuleResults(ModuleResult* out, size_t max) {
+    size_t n = 0;
+    if (xSemaphoreTake(veh_mtx_, pdMS_TO_TICKS(50)) == pdTRUE) {
+        n = (module_count_ < max) ? module_count_ : max;
+        memcpy(out, modules_, n * sizeof(ModuleResult));
+        xSemaphoreGive(veh_mtx_);
+    }
+    return n;
+}

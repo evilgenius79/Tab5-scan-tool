@@ -44,6 +44,12 @@ size_t parseDtcs(const std::string& resp, DtcRecord* out, size_t max,
 // already reassembled.
 bool parseVin(const std::string& resp, char* out);
 
+// Decode a UDS ReadDTCInformation (service 0x19, sub-function 0x02) response
+// into DTC records. The reply is "59 02 <availMask> [b1 b2 b3 status]...";
+// each DTC is 3 bytes (first two map to the P/C/B/U code, third is the failure
+// type byte) plus a 1-byte status. Returns the count written.
+size_t parseUdsDtcs(const std::string& resp, DtcRecord* out, size_t max);
+
 // Decode a generic Mode 09 ASCII reply (e.g. PID 04 calibration ID, PID 0A ECU
 // name). Scans for the 49 <pid> positive-response echo, skips the data-item
 // count byte, and copies the printable ASCII (NUL padding stripped) into `out`

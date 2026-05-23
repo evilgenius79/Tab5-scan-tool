@@ -33,6 +33,7 @@ idf_component_register(
         "ui/screens/screen_readiness.cpp"
         "ui/screens/screen_vehicle.cpp"
         "ui/screens/screen_livedata.cpp"
+        "ui/screens/screen_modules.cpp"
         "ui/screens/screen_logging.cpp"
         "ui/screens/screen_sniffer.cpp"
         "ui/screens/screen_settings.cpp"
