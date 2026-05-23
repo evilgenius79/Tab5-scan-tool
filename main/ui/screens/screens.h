@@ -37,3 +37,7 @@ void screen_settings_update(void);
 // Screen 7 - I/M Readiness Monitors (Mode 01 PID 01).
 void screen_readiness_create(lv_obj_t* parent);
 void screen_readiness_update(void);
+
+// Screen 8 - Vehicle Information (Mode 09: VIN, CALID, ECU name).
+void screen_vehicle_create(lv_obj_t* parent);
+void screen_vehicle_update(void);

@@ -250,6 +250,16 @@ void applyCommand(const ObdCommand& cmd) {
         } else {
             ESP_LOGW(TAG, "VIN read failed");
         }
+
+        // Calibration ID (Mode 09 PID 04) and ECU name (PID 0A) - both
+        // multi-frame ASCII, same long-timeout handling as the VIN.
+        std::string cal = g_link.sendCommand("0904", &ok, 5000);
+        stn::parseMode09Ascii(cal, 0x04, info.cal_id, sizeof(info.cal_id));
+        std::string ecu = g_link.sendCommand("090A", &ok, 5000);
+        stn::parseMode09Ascii(ecu, 0x0A, info.ecu_name, sizeof(info.ecu_name));
+        if (info.cal_id[0])   ESP_LOGI(TAG, "CALID: %s", info.cal_id);
+        if (info.ecu_name[0]) ESP_LOGI(TAG, "ECU:   %s", info.ecu_name);
+
         bus.setVehicleInfo(info);
         break;
     }

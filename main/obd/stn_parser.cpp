@@ -192,4 +192,37 @@ bool parseVin(const std::string& resp, char* out) {
     return false;
 }
 
+// ---------------------------------------------------------------------------
+//  Generic Mode 09 ASCII reply (CALID PID 04, ECU name PID 0A, ...). Same
+//  framing as VIN: find the 49 <pid> echo, skip the NODI count byte, then copy
+//  printable ASCII. NUL bytes (CALID field padding) are skipped; a run of other
+//  non-printable framing ends the current field with a single space separator.
+// ---------------------------------------------------------------------------
+size_t parseMode09Ascii(const std::string& resp, uint8_t pid, char* out, size_t cap) {
+    out[0] = '\0';
+    if (cap < 2 || isErrorResponse(resp)) return 0;
+    auto bytes = hexBytes(resp);
+
+    for (size_t i = 0; i + 1 < bytes.size(); ++i) {
+        if (bytes[i] != 0x49 || bytes[i + 1] != pid) continue;
+
+        size_t start = i + 2;
+        // Skip the data-item count byte (small value) when present.
+        if (start < bytes.size() && bytes[start] <= 0x10) ++start;
+
+        size_t n = 0;
+        bool gap = false;
+        for (size_t j = start; j < bytes.size() && n < cap - 1; ++j) {
+            uint8_t c = bytes[j];
+            if (c == 0x00) { gap = (n > 0); continue; }   // field padding
+            if (c < 0x20 || c > 0x7E) { gap = (n > 0); continue; }
+            if (gap) { out[n++] = ' '; gap = false; if (n >= cap - 1) break; }
+            out[n++] = (char)c;
+        }
+        out[n] = '\0';
+        return n;
+    }
+    return 0;
+}
+
 } // namespace stn

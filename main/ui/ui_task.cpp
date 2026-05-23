@@ -32,6 +32,7 @@ static void slow_refresh_cb(lv_timer_t*) {
     case ScreenId::Performance: screen_performance_update(); break;
     case ScreenId::Diagnostics: screen_diagnostics_update(); break;
     case ScreenId::Readiness:   screen_readiness_update();   break;
+    case ScreenId::Vehicle:     screen_vehicle_update();     break;
     case ScreenId::Logging:     screen_logging_update();     break;
     case ScreenId::Settings:    screen_settings_update();    break;
     default: break;

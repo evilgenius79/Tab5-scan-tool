@@ -65,6 +65,8 @@ struct VehicleInfo {
     char vin[18];           // 17 chars + NUL; empty string if not yet read
     char manufacturer[28];  // decoded from the WMI (chars 1-3), "" if unknown
     int  model_year;        // decoded from char 10, 0 if unknown
+    char cal_id[40];        // Mode 09 PID 04 calibration ID(s), "" if unread
+    char ecu_name[24];      // Mode 09 PID 0A ECU name, "" if unread
     bool valid;             // true once a VIN has been read and parsed
 };
 

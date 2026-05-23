@@ -41,6 +41,12 @@ size_t parseDtcs(const std::string& resp, DtcRecord* out, size_t max);
 // already reassembled.
 bool parseVin(const std::string& resp, char* out);
 
+// Decode a generic Mode 09 ASCII reply (e.g. PID 04 calibration ID, PID 0A ECU
+// name). Scans for the 49 <pid> positive-response echo, skips the data-item
+// count byte, and copies the printable ASCII (NUL padding stripped) into `out`
+// (capacity `cap`, NUL-terminated). Returns the number of characters written.
+size_t parseMode09Ascii(const std::string& resp, uint8_t pid, char* out, size_t cap);
+
 // Helper: true if the response is an adapter error token (NO DATA, ?, etc.).
 bool isErrorResponse(const std::string& resp);
 

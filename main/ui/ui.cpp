@@ -21,6 +21,7 @@ static const char* kTabNames[(int)ScreenId::_Count] = {
     LV_SYMBOL_GPS     " PERF",
     LV_SYMBOL_WARNING " DTC",
     LV_SYMBOL_OK      " I/M",
+    LV_SYMBOL_LIST    " VEH",
     LV_SYMBOL_SD_CARD " LOG",
     LV_SYMBOL_LIST    " CAN",
     LV_SYMBOL_SETTINGS" SET",
@@ -94,6 +95,9 @@ void ui_init() {
 
     page = lv_tabview_add_tab(g_tabview, kTabNames[(int)ScreenId::Readiness]);
     screen_readiness_create(page);
+
+    page = lv_tabview_add_tab(g_tabview, kTabNames[(int)ScreenId::Vehicle]);
+    screen_vehicle_create(page);
 
     page = lv_tabview_add_tab(g_tabview, kTabNames[(int)ScreenId::Logging]);
     screen_logging_create(page);

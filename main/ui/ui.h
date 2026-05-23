@@ -14,6 +14,7 @@ enum class ScreenId : int {
     Performance,   // 0-60 / quarter-mile timers
     Diagnostics,   // DTC table read/clear
     Readiness,     // I/M emissions readiness monitors
+    Vehicle,       // vehicle info: VIN / CALID / ECU name
     Logging,       // CSV logging toggle + status
     Sniffer,       // raw CAN frame monitor + filters
     Settings,      // baud / brightness / bus selection
