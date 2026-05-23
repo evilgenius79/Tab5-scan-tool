@@ -41,3 +41,7 @@ void screen_readiness_update(void);
 // Screen 8 - Vehicle Information (Mode 09: VIN, CALID, ECU name).
 void screen_vehicle_create(lv_obj_t* parent);
 void screen_vehicle_update(void);
+
+// Screen 9 - Live Data list (all decoded parameters in one table).
+void screen_livedata_create(lv_obj_t* parent);
+void screen_livedata_update(void);

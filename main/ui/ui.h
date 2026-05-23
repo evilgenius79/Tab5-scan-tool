@@ -15,6 +15,7 @@ enum class ScreenId : int {
     Diagnostics,   // DTC table read/clear
     Readiness,     // I/M emissions readiness monitors
     Vehicle,       // vehicle info: VIN / CALID / ECU name
+    LiveData,      // full live-data parameter list
     Logging,       // CSV logging toggle + status
     Sniffer,       // raw CAN frame monitor + filters
     Settings,      // baud / brightness / bus selection

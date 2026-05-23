@@ -21,8 +21,9 @@
 // their last state and refresh the instant their tab is shown.
 static void fast_refresh_cb(lv_timer_t*) {
     switch ((ScreenId)ui_active_screen()) {
-    case ScreenId::Dash:    screen_dash_update();    break;
-    case ScreenId::Sniffer: screen_sniffer_update(); break;
+    case ScreenId::Dash:     screen_dash_update();     break;
+    case ScreenId::Sniffer:  screen_sniffer_update();  break;
+    case ScreenId::LiveData: screen_livedata_update(); break;
     default: break;
     }
 }
