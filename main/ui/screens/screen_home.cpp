@@ -8,6 +8,7 @@
 #include "ui/screens/screens.h"
 #include "ui/ui.h"
 #include "ui/ui_theme.h"
+#include "core/tab5_power.h"
 
 #include <cstdint>   // intptr_t
 
@@ -28,6 +29,8 @@ const MenuItem kItems[] = {
     { LV_SYMBOL_SETTINGS, "Settings",      ScreenId::Settings,    COL_TEXT_DIM},
 };
 
+lv_obj_t* g_charge = nullptr;   // charge-status indicator in the header
+
 void card_cb(lv_event_t* e) {
     int target = (int)(intptr_t)lv_event_get_user_data(e);
     ui_goto_screen(target);
@@ -43,6 +46,12 @@ void screen_home_create(lv_obj_t* parent) {
     lv_obj_set_style_text_font(title, &lv_font_montserrat_28, 0);
     lv_label_set_text(title, "TAB5 SCAN TOOL");
     lv_obj_align(title, LV_ALIGN_TOP_LEFT, 4, 0);
+
+    // Charge-status indicator (top-right of the header).
+    g_charge = lv_label_create(parent);
+    lv_obj_set_style_text_font(g_charge, &lv_font_montserrat_20, 0);
+    lv_obj_align(g_charge, LV_ALIGN_TOP_RIGHT, -8, 0);
+    lv_label_set_text(g_charge, LV_SYMBOL_BATTERY_FULL);
 
     // Card grid: flex-wrap so it lays out responsively.
     lv_obj_t* grid = lv_obj_create(parent);
@@ -81,4 +90,13 @@ void screen_home_create(lv_obj_t* parent) {
     }
 }
 
-void screen_home_update(void) { /* static menu - nothing to refresh */ }
+void screen_home_update(void) {
+    if (!g_charge) return;
+    if (tab5pwr::is_charging()) {
+        lv_label_set_text(g_charge, LV_SYMBOL_CHARGE " Charging");
+        lv_obj_set_style_text_color(g_charge, COL_GREEN, 0);
+    } else {
+        lv_label_set_text(g_charge, LV_SYMBOL_BATTERY_FULL " On battery");
+        lv_obj_set_style_text_color(g_charge, COL_TEXT_DIM, 0);
+    }
+}

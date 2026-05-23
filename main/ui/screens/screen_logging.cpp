@@ -40,6 +40,9 @@ void screen_logging_create(lv_obj_t* parent) {
     lv_obj_align(g_switch, LV_ALIGN_LEFT_MID, 10, 10);
     lv_obj_set_style_bg_color(g_switch, COL_GRID, LV_PART_MAIN);
     lv_obj_set_style_bg_color(g_switch, COL_GREEN, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    // Reflect the current state (logging defaults ON).
+    if (EventBus::instance().logging_enabled.load())
+        lv_obj_add_state(g_switch, LV_STATE_CHECKED);
     lv_obj_add_event_cb(g_switch, toggle_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     lv_obj_t* hint = lv_label_create(panel);
@@ -69,6 +72,13 @@ void screen_logging_create(lv_obj_t* parent) {
 void screen_logging_update(void) {
     auto& bus = EventBus::instance();
     TelemetryState t = bus.snapshot();
+
+    // Keep the switch in sync with reality - it auto-offs if no SD card mounts.
+    const bool on = bus.logging_enabled.load();
+    if (on != lv_obj_has_state(g_switch, LV_STATE_CHECKED)) {
+        if (on) lv_obj_add_state(g_switch, LV_STATE_CHECKED);
+        else    lv_obj_remove_state(g_switch, LV_STATE_CHECKED);
+    }
 
     const bool sniff = bus.mode.load() == ObdMode::Sniffing;
     char buf[160];

@@ -52,14 +52,27 @@ int diag_vprintf(const char* fmt, va_list ap) {
 // Open the diagnostic log and install the hook. Call once, after SD is mounted.
 void diag_log_init() {
     if (g_diag_file) return;
-    g_diag_file = fopen(SD_MOUNT_POINT "/diag.log", "w");
+    // Persist across boots: APPEND so a module scan from any session is kept.
+    // Auto-trim (start fresh) if the file has grown past ~1 MB so the card
+    // doesn't fill up over time.
+    const char* mode = "a";
+    FILE* probe = fopen(SD_MOUNT_POINT "/diag.log", "r");
+    if (probe) {
+        fseek(probe, 0, SEEK_END);
+        if (ftell(probe) > 1024 * 1024) mode = "w";   // too big -> truncate
+        fclose(probe);
+    }
+    g_diag_file = fopen(SD_MOUNT_POINT "/diag.log", mode);
     if (!g_diag_file) {
         ESP_LOGW(TAG, "could not open diag.log");
         return;
     }
     g_diag_mtx = xSemaphoreCreateMutex();
+    // Boot separator so sessions are easy to tell apart in the appended file.
+    fprintf(g_diag_file, "\n==== boot (uptime %llu ms) ====\n",
+            (unsigned long long)(esp_timer_get_time() / 1000));
     g_prev_vprintf = esp_log_set_vprintf(diag_vprintf);
-    ESP_LOGI(TAG, "diagnostic log -> " SD_MOUNT_POINT "/diag.log");
+    ESP_LOGI(TAG, "diagnostic log -> " SD_MOUNT_POINT "/diag.log (append)");
 }
 
 void diag_log_flush() {

@@ -8,6 +8,7 @@ idf_component_register(
         # --- core: shared state, ring buffers, event plumbing ---------------
         "core/ring_buffer.cpp"
         "core/event_bus.cpp"
+        "core/tab5_power.cpp"
 
         # --- usb host transport ---------------------------------------------
         "usb/usb_host_cdc.cpp"

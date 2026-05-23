@@ -140,7 +140,9 @@ public:
     // Sniffer screen flips it to Sniffing on demand.
     std::atomic<ObdMode>   mode{ObdMode::Polling};
     std::atomic<CanBus>    bus{CanBus::HS_CAN};
-    std::atomic<bool>      logging_enabled{false};
+    // Logging starts ON; the SD logger turns it off automatically if no card
+    // is detected (see sd_logger ensureCardMounted failure path).
+    std::atomic<bool>      logging_enabled{true};
     std::atomic<bool>      sniffer_frozen{false};
     std::atomic<bool>      sniffer_filter_active{false};
     std::atomic<uint32_t>  current_baud{0};
