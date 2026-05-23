@@ -51,9 +51,14 @@ struct ObdCommand {
 // -----------------------------------------------------------------------------
 //  Diagnostic trouble code record (populated by ReadDtcs).
 // -----------------------------------------------------------------------------
+// DTC type tags stored in DtcRecord::status.
+static constexpr uint8_t DTC_STORED    = 0x01;  // Mode 03 (confirmed)
+static constexpr uint8_t DTC_PENDING   = 0x02;  // Mode 07
+static constexpr uint8_t DTC_PERMANENT = 0x04;  // Mode 0A
+
 struct DtcRecord {
     char     code[6];     // e.g. "P0301"
-    uint8_t  status;      // pending/confirmed/permanent bitfield
+    uint8_t  status;      // DTC_STORED / DTC_PENDING / DTC_PERMANENT
 };
 static constexpr size_t MAX_DTCS = 64;
 

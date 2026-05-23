@@ -138,13 +138,18 @@ int parsePidResponse(const std::string& resp, uint8_t expect_mode,
 //  Mode 03 DTC decode. Each code is 2 bytes; the top 2 bits select the letter
 //  domain (P/C/B/U) and the next 2 bits the first digit.
 // ---------------------------------------------------------------------------
-size_t parseDtcs(const std::string& resp, DtcRecord* out, size_t max) {
+size_t parseDtcs(const std::string& resp, DtcRecord* out, size_t max,
+                 uint8_t resp_echo, uint8_t status_tag) {
     if (isErrorResponse(resp)) return 0;
     auto bytes = hexBytes(resp);
 
-    // Skip a leading "43" positive-response echo if present.
+    // Skip the positive-response echo (43 stored / 47 pending / 4A permanent)
+    // plus an optional DTC-count byte that some ECUs prepend.
     size_t i = 0;
-    if (!bytes.empty() && bytes[0] == 0x43) i = 1;
+    if (!bytes.empty() && bytes[0] == resp_echo) {
+        i = 1;
+        if ((bytes.size() - i) % 2 == 1 && i < bytes.size()) ++i;  // count byte
+    }
 
     static const char domain[4] = { 'P', 'C', 'B', 'U' };
     size_t count = 0;
@@ -155,7 +160,7 @@ size_t parseDtcs(const std::string& resp, DtcRecord* out, size_t max) {
         r.code[0] = domain[(raw >> 14) & 0x3];
         r.code[1] = '0' + ((raw >> 12) & 0x3);
         snprintf(&r.code[2], 4, "%03X", raw & 0x0FFF);
-        r.status = 0;
+        r.status = status_tag;
         count++;
     }
     return count;

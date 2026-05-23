@@ -221,11 +221,17 @@ void applyCommand(const ObdCommand& cmd) {
         break;
 
     case CmdType::ReadDtcs: {
-        std::string resp = g_link.sendCommand(OBD_MODE_READ_DTC, &ok);
         DtcRecord recs[MAX_DTCS];
-        size_t n = stn::parseDtcs(resp, recs, MAX_DTCS);
+        size_t n = 0;
+        // Stored (Mode 03), pending (Mode 07) and permanent (Mode 0A).
+        std::string r3 = g_link.sendCommand(OBD_MODE_READ_DTC, &ok);     // "03"
+        n += stn::parseDtcs(r3, recs + n, MAX_DTCS - n, 0x43, DTC_STORED);
+        std::string r7 = g_link.sendCommand(OBD_MODE_PENDING_DTC, &ok);  // "07"
+        n += stn::parseDtcs(r7, recs + n, MAX_DTCS - n, 0x47, DTC_PENDING);
+        std::string rA = g_link.sendCommand("0A", &ok);                  // permanent
+        n += stn::parseDtcs(rA, recs + n, MAX_DTCS - n, 0x4A, DTC_PERMANENT);
         bus.setDtcs(recs, n);
-        ESP_LOGI(TAG, "read %u DTCs", (unsigned)n);
+        ESP_LOGI(TAG, "read %u DTCs (stored+pending+permanent)", (unsigned)n);
         break;
     }
 

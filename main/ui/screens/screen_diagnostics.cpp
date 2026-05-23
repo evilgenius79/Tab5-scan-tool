@@ -112,11 +112,13 @@ void screen_diagnostics_create(lv_obj_t* parent) {
     g_table = lv_table_create(parent);
     lv_obj_set_width(g_table, lv_pct(100));
     lv_obj_set_flex_grow(g_table, 1);
-    lv_table_set_column_count(g_table, 2);
-    lv_table_set_column_width(g_table, 0, 160);
-    lv_table_set_column_width(g_table, 1, 760);
+    lv_table_set_column_count(g_table, 3);
+    lv_table_set_column_width(g_table, 0, 120);
+    lv_table_set_column_width(g_table, 1, 140);
+    lv_table_set_column_width(g_table, 2, 660);
     lv_table_set_cell_value(g_table, 0, 0, "CODE");
-    lv_table_set_cell_value(g_table, 0, 1, "DESCRIPTION");
+    lv_table_set_cell_value(g_table, 0, 1, "TYPE");
+    lv_table_set_cell_value(g_table, 0, 2, "DESCRIPTION");
 
     lv_obj_set_style_bg_color(g_table, COL_PANEL, LV_PART_ITEMS);
     lv_obj_set_style_text_color(g_table, COL_TEXT, LV_PART_ITEMS);
@@ -152,14 +154,19 @@ void screen_diagnostics_update(void) {
     lv_table_set_row_count(g_table, n + 1);
     if (n == 0) {
         lv_table_set_cell_value(g_table, 1, 0, "--");
-        lv_table_set_cell_value(g_table, 1, 1, "No stored trouble codes");
+        lv_table_set_cell_value(g_table, 1, 1, "");
+        lv_table_set_cell_value(g_table, 1, 2, "No trouble codes (stored / pending / permanent)");
         lv_table_set_row_count(g_table, 2);
         return;
     }
     for (size_t i = 0; i < n; ++i) {
         lv_table_set_cell_value(g_table, i + 1, 0, recs[i].code);
+        const char* type = (recs[i].status & DTC_PERMANENT) ? "Permanent"
+                         : (recs[i].status & DTC_PENDING)   ? "Pending"
+                                                            : "Stored";
+        lv_table_set_cell_value(g_table, i + 1, 1, type);
         const char* desc = dtc::describe(recs[i].code);
-        lv_table_set_cell_value(g_table, i + 1, 1,
+        lv_table_set_cell_value(g_table, i + 1, 2,
                                 desc ? desc : "(unknown - add to dtc_db.csv)");
     }
 }

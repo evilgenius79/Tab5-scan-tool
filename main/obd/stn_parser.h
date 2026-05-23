@@ -31,8 +31,11 @@ bool parseCanFrame(const std::string& line, can_frame_t& out);
 int parsePidResponse(const std::string& resp, uint8_t expect_mode,
                      uint16_t expect_pid, uint8_t* data, size_t max);
 
-// Decode a Mode 03 / 07 response into DTC records. Returns the count written.
-size_t parseDtcs(const std::string& resp, DtcRecord* out, size_t max);
+// Decode a DTC response (Mode 03 stored / 07 pending / 0A permanent) into DTC
+// records, tagging each with `status_tag`. `resp_echo` is the positive-response
+// byte to skip (0x43 / 0x47 / 0x4A). Returns the count written.
+size_t parseDtcs(const std::string& resp, DtcRecord* out, size_t max,
+                 uint8_t resp_echo = 0x43, uint8_t status_tag = DTC_STORED);
 
 // Decode a Mode 09 PID 02 (VIN) response. The 17 ASCII characters are written
 // to `out` (must hold at least 18 bytes, NUL-terminated). Returns true if a
