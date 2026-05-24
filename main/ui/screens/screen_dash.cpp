@@ -18,23 +18,43 @@
 namespace {
 
 // --- Available gauge channels (parameter metadata) ----------------------------
-struct ChMeta { const char* name; const char* unit; float min; float max; int dec; };
+//  warn/danger are thresholds for the colour zones; low_bad=true means LOW values
+//  are the danger (e.g. battery). A huge threshold disables the zone (neutral).
+struct ChMeta {
+    const char* name; const char* unit; float min; float max; int dec;
+    float warn; float danger; bool low_bad;
+};
+constexpr float NONE = 1e9f;   // disables a colour zone
+
 // USA/imperial units throughout (mph, degF, psi).
 const ChMeta kCh[] = {
-    { "RPM",         "rpm",  0,    8000, 0 },   // 0
-    { "Boost",       "psi", -15,   35,   1 },   // 1
-    { "AFR",         "",     8,    20,   1 },   // 2
-    { "Ign Timing",  "deg", -10,   50,   1 },   // 3
-    { "Coolant",     "F",    0,    260,  0 },   // 4
-    { "Intake Air",  "F",    0,    250,  0 },   // 5
-    { "Speed",       "mph",  0,    140,  0 },   // 6
-    { "MAP",         "psi",  0,    37,   1 },   // 7
-    { "Throttle",    "%",    0,    100,  0 },   // 8
-    { "Eng Load",    "%",    0,    100,  0 },   // 9
-    { "Battery",     "V",    8,    16,   1 },   // 10
-    { "Barometric",  "psi",  10,   16,   1 },   // 11
+    { "RPM",        "rpm",  0,  8000, 0,  6000,  6600, false },  // 0 redline
+    { "Boost",      "psi",-15,  35,   1,  22,    28,   false },  // 1 overboost
+    { "AFR",        "",     8,  20,   1,  NONE,  NONE, false },  // 2 (context-dep)
+    { "Ign Timing", "deg",-10,  50,   1,  NONE,  NONE, false },  // 3
+    { "Coolant",    "F",    0,  260,  0,  220,   240,  false },  // 4 hot
+    { "Intake Air", "F",    0,  250,  0,  150,   180,  false },  // 5 heat soak
+    { "Speed",      "mph",  0,  140,  0,  NONE,  NONE, false },  // 6
+    { "MAP",        "psi",  0,  37,   1,  NONE,  NONE, false },  // 7
+    { "Throttle",   "%",    0,  100,  0,  NONE,  NONE, false },  // 8
+    { "Eng Load",   "%",    0,  100,  0,  NONE,  NONE, false },  // 9
+    { "Battery",    "V",    8,  16,   1,  12.0f, 11.5f,true  },  // 10 low = bad
+    { "Barometric", "psi", 10,  16,   1,  NONE,  NONE, false },  // 11
 };
 constexpr int kChCount = sizeof(kCh) / sizeof(kCh[0]);
+
+// Colour for a value given its channel's warn/danger zones.
+lv_color_t zoneColor(const ChMeta& m, float v) {
+    if (m.warn == NONE) return COL_CYAN;
+    if (m.low_bad) {
+        if (v <= m.danger) return COL_RED;
+        if (v <= m.warn)   return COL_AMBER;
+    } else {
+        if (v >= m.danger) return COL_RED;
+        if (v >= m.warn)   return COL_AMBER;
+    }
+    return COL_CYAN;
+}
 
 inline float c_to_f(float c)    { return c * 1.8f + 32.0f; }
 inline float kpa_to_psi(float k){ return k * 0.1450377f; }
@@ -166,5 +186,10 @@ void screen_dash_update(void) {
         lv_arc_set_value(g_gauge[i].arc, (int)(frac * 1000));
         snprintf(buf, sizeof(buf), "%.*f", m.dec, v);
         lv_label_set_text(g_gauge[i].value, buf);
+
+        // Colour the arc + readout by warning/danger zone.
+        lv_color_t col = zoneColor(m, v);
+        lv_obj_set_style_arc_color(g_gauge[i].arc, col, LV_PART_INDICATOR);
+        lv_obj_set_style_text_color(g_gauge[i].value, col, 0);
     }
 }
