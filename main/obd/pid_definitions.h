@@ -79,18 +79,9 @@ inline void afr(const uint8_t* d, uint8_t n, TelemetryState& t) {
     }
 }
 
-// --- Enhanced / manufacturer-specific (RETUNE per ECU) ----------------------
-inline void knock_retard(const uint8_t* d, uint8_t n, TelemetryState& t) {
-    // Example: signed degrees in 0.25 deg/bit on a custom UDS PID.
-    if (n >= 1) t.knock_retard_deg = (int8_t)d[0] * 0.25f;
-}
-inline void charge_air(const uint8_t* d, uint8_t n, TelemetryState& t) {
-    if (n >= 1) t.charge_air_c = (int)d[0] - 40;
-}
-inline void hpfp(const uint8_t* d, uint8_t n, TelemetryState& t) {
-    // High-pressure fuel rail, 0.1 bar/bit.
-    if (n >= 2) t.hpfp_pressure_bar = ((d[0] << 8) | d[1]) * 0.1f;
-}
+// Manufacturer-specific parameters (knock retard, charge-air temp, HPFP) are
+// not standard PIDs - they are handled by the data-driven custom-PID loader
+// (obd/custom_pids), not hard-coded decoders here.
 inline void ign_adv(const uint8_t* d, uint8_t n, TelemetryState& t) {
     if (n >= 1) t.ignition_adv_deg = (d[0] / 2.0f) - 64.0f;  // SAE PID 0E scaling
 }

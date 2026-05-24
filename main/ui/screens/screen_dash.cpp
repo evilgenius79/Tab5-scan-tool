@@ -89,10 +89,13 @@ void persist() {
     if (g_nvs) { nvs_set_blob(g_nvs, "slots", g_slot, NUM_GAUGES); nvs_commit(g_nvs); }
 }
 
-// Apply a channel to a slot: re-title the dropdown range stays 0..1000 (mapped).
+// Apply a channel to a slot: show the unit plus the gauge's scale range so the
+// reading always has a reference (e.g. "psi  -15..35").
 void applyChannel(int slot) {
     const ChMeta& m = kCh[g_slot[slot]];
-    lv_label_set_text(g_gauge[slot].unit, m.unit);
+    char u[36];
+    snprintf(u, sizeof(u), "%s  %g..%g", m.unit, m.min, m.max);
+    lv_label_set_text(g_gauge[slot].unit, u);
 }
 
 void dd_cb(lv_event_t* e) {
