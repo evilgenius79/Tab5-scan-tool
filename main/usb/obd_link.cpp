@@ -110,6 +110,29 @@ void ObdLink::stopMonitor() {
     usb_.flushRx();
 }
 
+size_t ObdLink::drainUntilQuiet(uint32_t quiet_ms, uint32_t max_ms) {
+    const uint64_t hard_deadline = esp_timer_get_time() + (uint64_t)max_ms * 1000;
+    uint64_t       quiet_deadline = esp_timer_get_time() + (uint64_t)quiet_ms * 1000;
+    size_t         total = 0;
+    uint8_t        buf[256];
+
+    line_acc_.clear();
+    while (true) {
+        const uint64_t now = esp_timer_get_time();
+        if (now >= hard_deadline || now >= quiet_deadline) break;
+        // Read in short slices; any byte received re-arms the quiet window.
+        size_t n = usb_.read(buf, sizeof(buf), 20);
+        if (n) {
+            total += n;
+            quiet_deadline = esp_timer_get_time() + (uint64_t)quiet_ms * 1000;
+        }
+    }
+    usb_.flushRx();
+    if (total) ESP_LOGW(TAG, "drained %u stray bytes after module access",
+                        (unsigned)total);
+    return total;
+}
+
 // ---------------------------------------------------------------------------
 //  Streaming line reader (monitor mode). Accumulates bytes across calls and
 //  yields one CR-terminated line at a time.

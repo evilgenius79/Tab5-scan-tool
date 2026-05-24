@@ -46,6 +46,13 @@ public:
     // the STN firmware treats as "stop monitoring", then drain to the prompt.
     void stopMonitor();
 
+    // Discard everything the adapter is still sending until the line stays
+    // quiet for `quiet_ms` (no new bytes), or `max_ms` total elapses. Needed
+    // after physically-addressed multi-frame transfers (module scan): a reply
+    // that arrives *after* our read times out would otherwise leak into the
+    // next command's response. Returns the number of stray bytes drained.
+    size_t drainUntilQuiet(uint32_t quiet_ms, uint32_t max_ms);
+
     // Pull the next complete line from the stream (monitor mode). Returns false
     // on timeout with no full line available. The returned line excludes CR/LF.
     bool readLine(std::string& out, uint32_t timeout_ms);

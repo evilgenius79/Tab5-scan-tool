@@ -242,10 +242,16 @@ const ModuleAddr g_fordModules[] = {
 constexpr size_t kFordModuleCount = sizeof(g_fordModules) / sizeof(g_fordModules[0]);
 
 // Restore OBD functional broadcast addressing after physical-module access.
+//  Order matters: drain any late multi-frame bytes still arriving from the
+//  last physically-addressed request FIRST, otherwise they leak into the
+//  re-addressing commands (or the first few PID polls) as garbage / "STOPPED".
 static void restoreFunctionalAddressing() {
     bool ok = false;
+    g_link.drainUntilQuiet(150, 1500);   // flush stray ISO-TP tail frames
+    g_link.sendCommand("ATCRA", &ok);    // clear the receive-address filter
     g_link.sendCommand("ATAR", &ok);     // automatic receive address
     g_link.sendCommand("ATSH7DF", &ok);  // OBD functional request header
+    g_link.drainUntilQuiet(100, 500);    // and once more for good measure
 }
 
 // ---------------------------------------------------------------------------
@@ -370,12 +376,27 @@ void applyCommand(const ObdCommand& cmd) {
             memset(&r, 0, sizeof(r));
             snprintf(r.name, sizeof(r.name), "%s", kModules[m].name);
             r.req_id    = kModules[m].req;
-            r.responded = ok && !stn::isErrorResponse(resp);
-            r.dtc_count = r.responded
-                        ? (uint8_t)stn::parseUdsDtcs(resp, r.dtcs, 8) : 0;
-            ESP_LOGI(TAG, "module %-14s %03X: %s, %u DTCs", r.name,
+
+            bool uds_ok = ok && !stn::isErrorResponse(resp);
+            if (uds_ok) {
+                r.responded = true;
+                r.dtc_count = (uint8_t)stn::parseUdsDtcs(resp, r.dtcs, 8);
+            } else {
+                // Fallback: many Ford powertrain modules (PCM 7E0 / TCM 7E1)
+                // are pre-UDS and reject service 0x19 (negative "7F 19 ..") or
+                // stay silent. They still answer the legacy OBD Mode 03 stored-
+                // DTC query when addressed physically. Try that before giving up.
+                std::string r03 = g_link.sendCommand("03", &ok, 1500);
+                bool obd_ok = ok && !stn::isErrorResponse(r03);
+                r.responded = obd_ok;
+                r.dtc_count = obd_ok
+                    ? (uint8_t)stn::parseDtcs(r03, r.dtcs, 8, 0x43, DTC_STORED) : 0;
+                ESP_LOGI(TAG, "module %-14s %03X UDS '%s' -> Mode03 '%s'",
+                         r.name, r.req_id, resp.c_str(), r03.c_str());
+            }
+            ESP_LOGI(TAG, "module %-14s %03X: %s, %u DTCs (raw '%s')", r.name,
                      r.req_id, r.responded ? "responded" : "no response",
-                     r.dtc_count);
+                     r.dtc_count, resp.c_str());
             mcount++;
         }
 
