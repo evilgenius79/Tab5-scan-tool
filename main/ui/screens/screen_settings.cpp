@@ -11,6 +11,7 @@
 #include "core/event_bus.h"
 
 #include "bsp/esp-bsp.h"
+#include "nvs.h"
 #include <cstdio>
 
 namespace {
@@ -19,6 +20,8 @@ lv_obj_t* g_baud_dd   = nullptr;
 lv_obj_t* g_bus_sw    = nullptr;
 lv_obj_t* g_bright_sl = nullptr;
 lv_obj_t* g_link_lbl  = nullptr;
+nvs_handle_t g_nvs    = 0;
+constexpr int DEFAULT_BRIGHTNESS = 80;
 
 // Baud options must track this list when decoding the dropdown selection.
 const uint32_t kBauds[] = { 115200, 230400, 500000, 1000000, 2000000 };
@@ -41,6 +44,7 @@ void bus_cb(lv_event_t* e) {
 void bright_cb(lv_event_t* e) {
     int v = lv_slider_get_value((lv_obj_t*)lv_event_get_target(e));
     bsp_display_brightness_set(v);    // 0..100 %
+    if (g_nvs) { nvs_set_u8(g_nvs, "bright", (uint8_t)v); nvs_commit(g_nvs); }
 }
 
 void reconnect_cb(lv_event_t*) {
@@ -72,6 +76,12 @@ void screen_settings_create(lv_obj_t* parent) {
     lv_obj_set_style_pad_all(parent, 16, 0);
     lv_obj_set_style_pad_row(parent, 12, 0);
 
+    // Restore persisted brightness and apply it immediately.
+    uint8_t saved_bright = DEFAULT_BRIGHTNESS;
+    if (nvs_open("settings", NVS_READWRITE, &g_nvs) == ESP_OK)
+        nvs_get_u8(g_nvs, "bright", &saved_bright);
+    bsp_display_brightness_set(saved_bright);
+
     // --- Baud rate ----------------------------------------------------------
     lv_obj_t* row = setting_row(parent, "USB Baud Rate");
     g_baud_dd = lv_dropdown_create(row);
@@ -91,7 +101,7 @@ void screen_settings_create(lv_obj_t* parent) {
     row = setting_row(parent, "Screen Brightness");
     g_bright_sl = lv_slider_create(row);
     lv_slider_set_range(g_bright_sl, 10, 100);
-    lv_slider_set_value(g_bright_sl, 80, LV_ANIM_OFF);
+    lv_slider_set_value(g_bright_sl, saved_bright, LV_ANIM_OFF);
     lv_obj_set_width(g_bright_sl, 300);
     lv_obj_set_style_bg_color(g_bright_sl, COL_GRID, LV_PART_MAIN);
     lv_obj_set_style_bg_color(g_bright_sl, COL_CYAN, LV_PART_INDICATOR);
