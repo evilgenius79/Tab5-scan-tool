@@ -31,6 +31,8 @@ namespace {
 UsbHostCdc      g_usb;
 ObdLink         g_link(g_usb);
 TelemetryState  g_telem{};         // working copy; published to the bus each loop
+bool            g_reinit_needed = false;  // set when the adapter is seen echoing
+                                          // (it reset and lost ATE0) - re-init
 
 // Performance-run capture state.
 struct PerfRun {
@@ -78,6 +80,10 @@ void pollPid(const PidDef& pid) {
     // is finicky and was returning errors. The adapter answers with the
     // positive-response echo + data (e.g. "41 0C 1A F8").
     resp = g_link.sendCommand(pid.request, &ok);
+
+    // If the reply begins with the request itself, command echo is ON - the
+    // adapter reset and lost its ATE0 config. Flag for re-initialization.
+    if (resp.rfind(pid.request, 0) == 0) g_reinit_needed = true;
 
     // Throttled poll trace (~3 lines/s) -> console + SD diag.log. Lets an
     // in-vehicle session be debugged afterward: shows the adapter's raw reply
@@ -531,6 +537,13 @@ void obdTask(void*) {
             break;
 
         case ObdMode::Polling: {
+            // Recover if the adapter reset and lost its config (echo came back).
+            if (g_reinit_needed) {
+                ESP_LOGW(TAG, "adapter echo detected - re-initializing");
+                g_reinit_needed = false;
+                g_link.initialize();
+                break;
+            }
             pollPid(kPidCatalog[pid_idx]);
             pid_idx = (pid_idx + 1) % kPidCount;
             // Interleave one custom/profile PID per loop (knock, CACT, ...).

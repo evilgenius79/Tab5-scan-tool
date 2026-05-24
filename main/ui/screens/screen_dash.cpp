@@ -19,36 +19,40 @@ namespace {
 
 // --- Available gauge channels (parameter metadata) ----------------------------
 struct ChMeta { const char* name; const char* unit; float min; float max; int dec; };
+// USA/imperial units throughout (mph, degF, psi).
 const ChMeta kCh[] = {
     { "RPM",         "rpm",  0,    8000, 0 },   // 0
     { "Boost",       "psi", -15,   35,   1 },   // 1
     { "AFR",         "",     8,    20,   1 },   // 2
     { "Ign Timing",  "deg", -10,   50,   1 },   // 3
-    { "Coolant",     "C",   -20,   130,  0 },   // 4
-    { "Intake Air",  "C",   -20,   120,  0 },   // 5
-    { "Speed",       "km/h", 0,    220,  0 },   // 6
-    { "MAP",         "kPa",  0,    255,  0 },   // 7
+    { "Coolant",     "F",    0,    260,  0 },   // 4
+    { "Intake Air",  "F",    0,    250,  0 },   // 5
+    { "Speed",       "mph",  0,    140,  0 },   // 6
+    { "MAP",         "psi",  0,    37,   1 },   // 7
     { "Throttle",    "%",    0,    100,  0 },   // 8
     { "Eng Load",    "%",    0,    100,  0 },   // 9
     { "Battery",     "V",    8,    16,   1 },   // 10
-    { "Barometric",  "kPa",  80,   110,  0 },   // 11
+    { "Barometric",  "psi",  10,   16,   1 },   // 11
 };
 constexpr int kChCount = sizeof(kCh) / sizeof(kCh[0]);
+
+inline float c_to_f(float c)    { return c * 1.8f + 32.0f; }
+inline float kpa_to_psi(float k){ return k * 0.1450377f; }
 
 float channelValue(int ch, const TelemetryState& t) {
     switch (ch) {
         case 0:  return t.rpm;
-        case 1:  return t.boost_psi;
+        case 1:  return t.boost_psi;                  // already psi
         case 2:  return t.afr;
         case 3:  return t.ignition_adv_deg;
-        case 4:  return t.coolant_c;
-        case 5:  return t.intake_air_c;
-        case 6:  return t.speed_kph;
-        case 7:  return t.map_kpa;
+        case 4:  return c_to_f(t.coolant_c);
+        case 5:  return c_to_f(t.intake_air_c);
+        case 6:  return t.speed_kph * 0.621371f;      // mph
+        case 7:  return kpa_to_psi(t.map_kpa);
         case 8:  return t.throttle_pct;
         case 9:  return t.engine_load;
         case 10: return t.battery_v;
-        case 11: return t.baro_kpa;
+        case 11: return kpa_to_psi(t.baro_kpa);
         default: return 0;
     }
 }

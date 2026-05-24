@@ -28,7 +28,7 @@ bool              g_loaded = false;
 // Fields: name, request, bytes, signed, scale, offset, unit.
 const CustomPid kFordDefaults[] = {
     { "Knock Retard",    "220318", 0,0, 1, true,  0.0625f,   0.0f, "deg" },
-    { "Charge Air Temp", "22F40F", 0,0, 1, false, 1.0f,    -40.0f, "C"   },
+    { "Charge Air Temp", "22F40F", 0,0, 1, false, 1.8f,    -40.0f, "F"   },
     { "Turbo Boost",     "220466", 0,0, 2, false, 0.0011328f, -14.7f, "psi" },
 };
 

@@ -66,16 +66,16 @@ void screen_livedata_update(void) {
         lv_table_set_cell_value(g_table, row + 1, 1, b);
     };
     set(R_RPM,      "%.0f rpm",  t.rpm);
-    set(R_SPEED,    "%.0f km/h", t.speed_kph);
-    set(R_MAP,      "%.0f kPa",  t.map_kpa);
+    set(R_SPEED,    "%.0f mph",  t.speed_kph * 0.621371f);
+    set(R_MAP,      "%.1f psi",  t.map_kpa * 0.1450377f);
     set(R_BOOST,    "%.1f psi",  t.boost_psi);
     set(R_THROTTLE, "%.0f %%",   t.throttle_pct);
     set(R_LOAD,     "%.0f %%",   t.engine_load);
     set(R_IGN,      "%.1f deg",  t.ignition_adv_deg);
-    set(R_COOLANT,  "%.0f C",    t.coolant_c);
-    set(R_IAT,      "%.0f C",    t.intake_air_c);
+    set(R_COOLANT,  "%.0f F",    t.coolant_c * 1.8f + 32.0f);
+    set(R_IAT,      "%.0f F",    t.intake_air_c * 1.8f + 32.0f);
     set(R_AFR,      "%.1f",      t.afr);
-    set(R_BARO,     "%.0f kPa",  t.baro_kpa);
+    set(R_BARO,     "%.1f psi",  t.baro_kpa * 0.1450377f);
     set(R_BATT,     "%.2f V",    t.battery_v);
 
     // Append manufacturer/custom PIDs (loaded from SD or the Ford defaults).
