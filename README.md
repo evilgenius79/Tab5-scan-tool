@@ -2,21 +2,33 @@
 
 A motorsport-grade automotive scantool and CAN sniffer for the **M5Stack Tab5**
 (ESP32-P4, 1280×720 IPS touchscreen) driving an **OBDLink EX** over the Tab5's
-USB-A host port. Built on **ESP-IDF 5.4+** and **LVGL 9**.
+USB-A host port. Built on **ESP-IDF 5.5** and **LVGL 9**. Tuned for the
+**2013 Ford Explorer Sport 3.5 EcoBoost** test vehicle but kept multi-car:
+standard SAE PIDs are universal; enhanced/module access uses a Ford profile.
 
 ## Features
 
 - **Dual-mode OBD engine**
-  - *Mode A — Polling*: ultra-fast STN `STPX` PID requests (RPM, MAP, knock
-    retard, charge-air temp, HPFP, AFR, …).
-  - *Mode B — Raw Sniffer*: STN monitor (`STMA` / filtered `STM`) streaming raw
-    CAN frames to the UI and SD card.
+  - *Mode A — Polling*: round-robin OBD requests for the standard SAE PIDs
+    (RPM, MAP/boost, AFR, ignition timing, coolant, IAT, load, baro, …) plus
+    data-driven manufacturer PIDs (knock retard, charge-air temp, turbo boost)
+    from the custom-PID loader.
+  - *Mode B — Raw Sniffer*: STN monitor (`STMA` / filtered) streaming raw CAN
+    frames to the UI and SD card with a hex pass-filter keypad.
 - **Strict task separation**: LVGL on core 1, USB/OBD I/O on core 0, with a
   PSRAM-backed lock-free frame ring so high-rate CAN traffic never blocks the UI.
 - **Auto-reconnecting USB host** (FTDI / CP210x / CH34x via `usb_host_vcp`).
-- **Six LVGL screens**: Live Dash, Performance (0-60 / ¼-mile), Diagnostics
-  (DTC read/clear), Data Logging, CAN Sniffer + hex filter keypad, Settings.
-- **High-speed CSV logging** to microSD (decoded telemetry or raw CAN).
+- **Eleven LVGL screens**: Home launcher, Live Dash (configurable gauge grid),
+  Live Data, Performance (0-60 / ¼-mile + session peaks), Trouble Codes
+  (read/clear, all DTC types), Module Scan (multi-ECU read + clear), Vehicle
+  Info (VIN/CALID/ECU), I/M Readiness, Data Logging, CAN Sniffer, Settings.
+- **Configurable dash**: each gauge slot picks its parameter from a dropdown;
+  assignments persist in NVS. USA units throughout (mph, °F, psi).
+- **High-speed CSV logging** to microSD (decoded telemetry or raw CAN), on by
+  default and auto-disabled when no card is present. A persistent `diag.log`
+  mirrors the console across boots for post-drive review.
+- **Tab5 battery**: internal charging enabled; battery % shown on Home whether
+  plugged in or running off the pack.
 
 ## Architecture
 
@@ -39,7 +51,7 @@ USB-A host port. Built on **ESP-IDF 5.4+** and **LVGL 9**.
 
 ## Build
 
-ESP32-P4 support is most reliable with a native ESP-IDF build:
+ESP32-P4 must be built with native **ESP-IDF 5.5** (`idf.py`):
 
 ```bash
 idf.py set-target esp32p4
@@ -49,21 +61,48 @@ idf.py build flash monitor
 Managed components (LVGL, esp_lvgl_port, M5Stack Tab5 BSP, USB VCP/FTDI
 drivers) are resolved automatically from `main/idf_component.yml`.
 
-A `platformio.ini` is also provided (use the `pioarduino` platform fork for P4
-support), but `idf.py` is the recommended path.
+> **Note:** the PlatformIO / `pioarduino` path is currently broken for a pure
+> ESP-IDF P4 build (linker `sram_seg` vs `sram_low` section mismatch). Use
+> `idf.py`. When flashing, use `--after hard_reset` so the adapter's DTR/RTS
+> lines don't drop the board into download mode.
+
+## MAP / boost sensor
+
+Boost is derived from manifold absolute pressure. The MAP-sensor full scale is
+set in `main/app_config.h`:
+
+```c
+#define MAP_SENSOR_BAR  3.0f   // 3-bar sensor: 0–300 kPa absolute
+```
+
+This scales the **Boost** and **MAP** dash gauges automatically — a 3-bar
+sensor gives a ~43.5 psi MAP range and a ~28.8 psi gauge-boost ceiling, with
+the overboost warn/danger zones tracking that ceiling.
+
+> **Single-byte limit:** standard OBD PID `0x0B` (MAP) returns one byte, so it
+> saturates at **255 kPa (~22.3 psi boost)** no matter the physical sensor. To
+> read the full 3-bar range above that, source boost from the enhanced 2-byte
+> **Turbo Boost** PID via the custom-PID loader (below).
 
 ## Hardware notes
 
 - Connect the OBDLink EX to the Tab5 **USB-A host** port. The P4 supplies the
   device; no powered hub is required for the EX.
-- The default adapter link runs at **2 Mbps**; change it on the Settings screen
-  (`STBR`). Brightness and HS-CAN/MS-CAN selection also live there.
+- The adapter link opens at **115200 baud** (the EX/STN power-on rate); it can
+  be renegotiated higher at runtime on the Settings screen (`STBR`).
+  Brightness and HS-CAN/MS-CAN selection also live there.
 - microSD logging writes `telemetry-*.csv` (polling) or `canlog-*.csv`
-  (sniffing) depending on the active mode when logging is toggled on.
+  (sniffing) depending on the active mode. The telemetry CSV appends a column
+  per loaded custom PID and writes one row per fresh poll.
 
-## Calibration warning
+## Custom / manufacturer PIDs
 
-The **enhanced PIDs** (knock retard, charge-air temp, HPFP) in
-`main/obd/pid_definitions.h` use placeholder headers and scaling modeled on a
-common turbo platform. **These are manufacturer/ECU-specific and must be
-retuned for your vehicle.** Standard SAE J1979 PIDs decode correctly as-is.
+Standard SAE J1979 PIDs are built in and decode correctly as-is. Manufacturer
+parameters (knock retard, charge-air temp, turbo boost, …) are **data-driven**:
+
+- If `/sdcard/custom_pids.csv` is present it is loaded (any make), one PID per
+  line: `name,request,bytes,signed,scale,offset,unit`.
+- Otherwise a small built-in **Ford EcoBoost** default set is used.
+
+> The built-in Ford scalings are community FORScan figures and **should be
+> verified against your vehicle** — edit the CSV to correct them.

@@ -9,6 +9,7 @@
 #include "ui/screens/screens.h"
 #include "ui/ui_theme.h"
 #include "core/event_bus.h"
+#include "app_config.h"   // MAP_SENSOR_BAR / SEA_LEVEL_KPA / KPA_TO_PSI
 
 #include <cstdio>
 #include <cstring>
@@ -26,16 +27,26 @@ struct ChMeta {
 };
 constexpr float NONE = 1e9f;   // disables a colour zone
 
+// Boost/MAP gauge scaling derived from the configured MAP-sensor full scale
+// (app_config.h). A 3-bar sensor -> 300 kPa absolute -> ~43.5 psi MAP, with a
+// ~28.8 psi gauge-boost ceiling once atmospheric is subtracted. Overboost
+// warn/danger zones scale as a fraction of that ceiling so swapping the sensor
+// size reflows the gauge automatically.
+constexpr float kMapFullKpa  = MAP_SENSOR_BAR * 100.0f;
+constexpr float kMapFullPsi  = kMapFullKpa * KPA_TO_PSI;
+constexpr float kBoostMaxPsi = (kMapFullKpa - SEA_LEVEL_KPA) * KPA_TO_PSI;
+
 // USA/imperial units throughout (mph, degF, psi).
 const ChMeta kCh[] = {
     { "RPM",        "rpm",  0,  8000, 0,  6000,  6600, false },  // 0 redline
-    { "Boost",      "psi",-15,  35,   1,  22,    28,   false },  // 1 overboost
+    { "Boost",      "psi",-15,  kBoostMaxPsi, 1,                  // 1 overboost
+                    kBoostMaxPsi * 0.80f, kBoostMaxPsi * 0.93f, false },
     { "AFR",        "",     8,  20,   1,  NONE,  NONE, false },  // 2 (context-dep)
     { "Ign Timing", "deg",-10,  50,   1,  NONE,  NONE, false },  // 3
     { "Coolant",    "F",    0,  260,  0,  220,   240,  false },  // 4 hot
     { "Intake Air", "F",    0,  250,  0,  150,   180,  false },  // 5 heat soak
     { "Speed",      "mph",  0,  140,  0,  NONE,  NONE, false },  // 6
-    { "MAP",        "psi",  0,  37,   1,  NONE,  NONE, false },  // 7
+    { "MAP",        "psi",  0,  kMapFullPsi, 1, NONE, NONE, false }, // 7 (3-bar)
     { "Throttle",   "%",    0,  100,  0,  NONE,  NONE, false },  // 8
     { "Eng Load",   "%",    0,  100,  0,  NONE,  NONE, false },  // 9
     { "Battery",    "V",    8,  16,   1,  12.0f, 11.5f,true  },  // 10 low = bad

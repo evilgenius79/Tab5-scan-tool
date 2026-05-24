@@ -72,6 +72,22 @@
 #define OBD_CMD_TIMEOUT_MS       1000
 
 // -----------------------------------------------------------------------------
+//  MAP / boost sensor scaling
+// -----------------------------------------------------------------------------
+//  Full-scale of the manifold-absolute-pressure sensor, in bar. A factory NA
+//  sensor reads ~1.05 bar; forced-induction builds commonly fit a 2.5 or 3 bar
+//  sensor. This sets the top of the Boost and MAP gauges (and their warn/danger
+//  zones scale from it).
+//
+//  IMPORTANT: standard OBD PID 0x0B (MAP) returns a SINGLE byte, so it saturates
+//  at 255 kPa (~22.3 psi boost) regardless of the physical sensor. To read the
+//  full 3-bar range above that, source boost from the enhanced 2-byte "Turbo
+//  Boost" PID via the custom-PID loader (obd/custom_pids).
+#define MAP_SENSOR_BAR           3.0f
+#define SEA_LEVEL_KPA            101.325f
+#define KPA_TO_PSI               0.1450377f
+
+// -----------------------------------------------------------------------------
 //  Logging
 // -----------------------------------------------------------------------------
 #define SD_MOUNT_POINT           "/sdcard"
