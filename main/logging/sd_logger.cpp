@@ -3,6 +3,7 @@
 // =============================================================================
 #include "logging/sd_logger.h"
 #include "core/event_bus.h"
+#include "obd/custom_pids.h"
 #include "app_config.h"
 
 #include <cstdio>
@@ -106,10 +107,19 @@ bool openFile(bool can_mode) {
     if (can_mode) {
         fprintf(g_file, "timestamp_us,can_id,extended,dlc,b0,b1,b2,b3,b4,b5,b6,b7\n");
     } else {
+        // Standard columns are always populated. The old fixed knock_retard_deg/
+        // charge_air_c/hpfp_bar columns were dropped: those TelemetryState fields
+        // are never written (manufacturer params live in the custom-PID store),
+        // so they only ever logged zeros. Instead, append one column per loaded
+        // custom/profile PID with its real name + unit, pulled live from custpid.
         fprintf(g_file,
-            "timestamp_us,rpm,speed_kph,map_kpa,boost_psi,afr,knock_retard_deg,"
-            "charge_air_c,coolant_c,iat_c,throttle_pct,ign_adv_deg,hpfp_bar,"
-            "battery_v\n");
+            "timestamp_us,rpm,speed_kph,map_kpa,boost_psi,afr,eng_load_pct,"
+            "coolant_c,iat_c,throttle_pct,ign_adv_deg,battery_v");
+        for (size_t i = 0; i < custpid::count(); ++i) {
+            const CustomPid& c = custpid::def(i);
+            fprintf(g_file, ",%s[%s]", c.name, c.unit);
+        }
+        fputc('\n', g_file);
     }
     ESP_LOGI(TAG, "logging to %s", path);
     return true;
@@ -126,11 +136,18 @@ void closeFile() {
 
 void writeTelemetryRow(const TelemetryState& t) {
     fprintf(g_file,
-        "%llu,%.0f,%.1f,%.1f,%.2f,%.2f,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.2f\n",
+        "%llu,%.0f,%.1f,%.1f,%.2f,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.2f",
         (unsigned long long)t.last_update_us,
-        t.rpm, t.speed_kph, t.map_kpa, t.boost_psi, t.afr, t.knock_retard_deg,
-        t.charge_air_c, t.coolant_c, t.intake_air_c, t.throttle_pct,
-        t.ignition_adv_deg, t.hpfp_pressure_bar, t.battery_v);
+        t.rpm, t.speed_kph, t.map_kpa, t.boost_psi, t.afr, t.engine_load,
+        t.coolant_c, t.intake_air_c, t.throttle_pct,
+        t.ignition_adv_deg, t.battery_v);
+    // Live custom/profile PID values (knock retard, charge-air temp, boost, ...).
+    for (size_t i = 0; i < custpid::count(); ++i) {
+        float v;
+        if (custpid::getValue(i, v)) fprintf(g_file, ",%.2f", v);
+        else                         fputc(',', g_file);   // not yet polled
+    }
+    fputc('\n', g_file);
 }
 
 void writeFrameRow(const can_frame_t& f) {
@@ -162,6 +179,7 @@ void loggerTask(void*) {
 
     can_frame_t frame;
     uint64_t last_telem_us = 0;
+    uint64_t last_logged_update_us = 0;   // dedup: skip unchanged snapshots
     uint64_t last_diag_flush_us = 0;
 
     while (true) {
@@ -205,14 +223,20 @@ void loggerTask(void*) {
             }
             if (drained == 0) vTaskDelay(pdMS_TO_TICKS(5));
         } else {
-            // Telemetry sampling at a fixed cadence (~50 Hz). Skip rows with no
-            // data yet (last_update_us == 0) so the file never starts with zeros.
+            // Telemetry sampling. Poll one row per actual data refresh: the OBD
+            // task advances last_update_us once per poll loop (~8-9 Hz over USB),
+            // so sampling on a fixed 50 Hz timer previously wrote each snapshot
+            // 5-7x with an identical timestamp. Dedup on last_update_us to emit
+            // exactly one row per fresh poll. Still skip the all-zero pre-data
+            // state (last_update_us == 0).
             const uint64_t now = esp_timer_get_time();
             if (now - last_telem_us >= 20000) {
                 TelemetryState t = bus.snapshot();
-                if (t.last_update_us != 0) {
+                if (t.last_update_us != 0 &&
+                    t.last_update_us != last_logged_update_us) {
                     writeTelemetryRow(t);
                     maybeFlush();
+                    last_logged_update_us = t.last_update_us;
                 }
                 last_telem_us = now;
             }
