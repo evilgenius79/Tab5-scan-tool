@@ -174,8 +174,11 @@ void loggerTask(void*) {
         }
 
         const bool want = bus.logging_enabled.load();
+        // Only start a log once the adapter is online - otherwise the file fills
+        // with zero rows during boot / on the bench before any data exists.
+        const bool online = bus.link.load() == LinkState::Online;
 
-        if (want && !g_file) {
+        if (want && online && !g_file) {
             // Mount on first use; if the card/LDO isn't available, drop the
             // logging request so the UI switch reflects reality.
             if (sd_card_ensure_mounted()) {
@@ -202,11 +205,15 @@ void loggerTask(void*) {
             }
             if (drained == 0) vTaskDelay(pdMS_TO_TICKS(5));
         } else {
-            // Telemetry sampling at a fixed cadence (~50 Hz).
+            // Telemetry sampling at a fixed cadence (~50 Hz). Skip rows with no
+            // data yet (last_update_us == 0) so the file never starts with zeros.
             const uint64_t now = esp_timer_get_time();
             if (now - last_telem_us >= 20000) {
-                writeTelemetryRow(bus.snapshot());
-                maybeFlush();
+                TelemetryState t = bus.snapshot();
+                if (t.last_update_us != 0) {
+                    writeTelemetryRow(t);
+                    maybeFlush();
+                }
                 last_telem_us = now;
             }
             vTaskDelay(pdMS_TO_TICKS(5));
