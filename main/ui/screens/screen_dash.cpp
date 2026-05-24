@@ -9,11 +9,13 @@
 #include "ui/screens/screens.h"
 #include "ui/ui_theme.h"
 #include "core/event_bus.h"
-#include "app_config.h"   // MAP_SENSOR_BAR / SEA_LEVEL_KPA / KPA_TO_PSI
+#include "obd/custom_pids.h"   // enhanced Turbo Boost PID for the Boost gauge
+#include "app_config.h"        // MAP_SENSOR_BAR / SEA_LEVEL_KPA / KPA_TO_PSI
 
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
+#include <cctype>
 #include "nvs.h"
 
 namespace {
@@ -70,10 +72,42 @@ lv_color_t zoneColor(const ChMeta& m, float v) {
 inline float c_to_f(float c)    { return c * 1.8f + 32.0f; }
 inline float kpa_to_psi(float k){ return k * 0.1450377f; }
 
+// Case-insensitive "does `s` contain `sub`" (tiny, avoids strcasestr).
+bool containsCI(const char* s, const char* sub) {
+    for (; *s; ++s) {
+        const char* a = s; const char* b = sub;
+        while (*a && *b && (tolower((unsigned char)*a) == tolower((unsigned char)*b))) { ++a; ++b; }
+        if (!*b) return true;
+    }
+    return false;
+}
+
+// Find the custom/profile PID that represents turbo boost (matched by name),
+// so the Boost gauge can prefer the enhanced 2-byte reading over the 1-byte,
+// 255 kPa-capped MAP derivation. Re-searched until the custom PIDs finish
+// loading (custpid::load runs once the adapter is online); -1 = none defined.
+int boostCustomIdx() {
+    static int idx = -1;
+    if (idx < 0 && custpid::count() > 0) {
+        for (size_t i = 0; i < custpid::count(); ++i) {
+            if (containsCI(custpid::def(i).name, "boost")) { idx = (int)i; break; }
+        }
+    }
+    return idx;
+}
+
 float channelValue(int ch, const TelemetryState& t) {
     switch (ch) {
         case 0:  return t.rpm;
-        case 1:  return t.boost_psi;                  // already psi
+        case 1: {                                     // Boost (psi)
+            // Prefer the enhanced Turbo Boost PID; it isn't capped at the
+            // single-byte MAP ceiling (~22 psi). Fall back to MAP-derived boost
+            // when no boost PID is defined or it hasn't been polled yet.
+            int bi = boostCustomIdx();
+            float bv;
+            if (bi >= 0 && custpid::getValue(bi, bv)) return bv;
+            return t.boost_psi;
+        }
         case 2:  return t.afr;
         case 3:  return t.ignition_adv_deg;
         case 4:  return c_to_f(t.coolant_c);
