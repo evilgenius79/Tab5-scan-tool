@@ -34,6 +34,12 @@ struct TelemetryState {
     float    quarter_mile_s;      // last 1/4 mile ET         [s]
     float    quarter_mile_trap;   // trap speed               [mph]
 
+    // --- Session peak-hold (since boot / last reset) -------------------------
+    float    peak_rpm;            // highest RPM seen
+    float    peak_boost_psi;      // highest boost
+    float    peak_coolant_c;      // highest coolant temp
+    float    top_speed_kph;       // highest vehicle speed
+
     // --- Health / freshness --------------------------------------------------
     uint64_t last_update_us;      // timestamp of newest field write
     uint64_t last_good_pid_us;    // timestamp of last successfully decoded PID

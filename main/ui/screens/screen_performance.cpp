@@ -20,6 +20,10 @@ lv_obj_t* g_qmile_val = nullptr;
 lv_obj_t* g_trap_val  = nullptr;
 lv_obj_t* g_arm_btn   = nullptr;
 lv_obj_t* g_arm_lbl   = nullptr;
+lv_obj_t* g_pk_rpm    = nullptr;
+lv_obj_t* g_pk_boost  = nullptr;
+lv_obj_t* g_pk_cool   = nullptr;
+lv_obj_t* g_pk_speed  = nullptr;
 
 // Reusable "stat card": big value over a dim caption.
 lv_obj_t* stat_card(lv_obj_t* parent, const char* caption, const char* init) {
@@ -44,6 +48,11 @@ void arm_clicked_cb(lv_event_t*) {
     lv_obj_set_style_text_color(g_arm_btn, COL_MAGENTA, 0);
 }
 
+void reset_peaks_cb(lv_event_t*) {
+    ObdCommand cmd{ CmdType::ResetPeaks, 0, 0 };
+    EventBus::instance().sendCommand(cmd, 0);
+}
+
 } // namespace
 
 void screen_performance_create(lv_obj_t* parent) {
@@ -56,7 +65,7 @@ void screen_performance_create(lv_obj_t* parent) {
     // Live speed banner.
     lv_obj_t* banner = ui_make_panel(parent, "VEHICLE SPEED");
     lv_obj_set_width(banner, lv_pct(100));
-    lv_obj_set_height(banner, 160);
+    lv_obj_set_height(banner, 120);
     g_speed_val = lv_label_create(banner);
     lv_obj_add_style(g_speed_val, &st_value_big, 0);
     lv_obj_set_style_text_font(g_speed_val, &lv_font_montserrat_48, 0);
@@ -67,7 +76,7 @@ void screen_performance_create(lv_obj_t* parent) {
     lv_obj_t* row = lv_obj_create(parent);
     lv_obj_add_style(row, &st_screen, 0);
     lv_obj_set_width(row, lv_pct(100));
-    lv_obj_set_height(row, 160);
+    lv_obj_set_height(row, 130);
     lv_obj_set_flex_flow(row, LV_FLEX_FLOW_ROW);
     lv_obj_set_flex_align(row, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
@@ -77,14 +86,45 @@ void screen_performance_create(lv_obj_t* parent) {
     g_qmile_val = stat_card(row, "1/4 MILE (s)", "--.--");
     g_trap_val  = stat_card(row, "TRAP (mph)",   "---");
 
-    // Arm button.
-    g_arm_btn = lv_btn_create(parent);
+    // Session peaks row.
+    lv_obj_t* prow = lv_obj_create(parent);
+    lv_obj_add_style(prow, &st_screen, 0);
+    lv_obj_set_width(prow, lv_pct(100));
+    lv_obj_set_height(prow, 130);
+    lv_obj_set_flex_flow(prow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(prow, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(prow, LV_OBJ_FLAG_SCROLLABLE);
+    g_pk_rpm   = stat_card(prow, "PEAK RPM",     "0");
+    g_pk_boost = stat_card(prow, "PEAK BOOST",   "0.0");
+    g_pk_cool  = stat_card(prow, "MAX COOL (F)", "0");
+    g_pk_speed = stat_card(prow, "TOP SPEED",    "0");
+
+    // Button row: arm run + reset peaks.
+    lv_obj_t* brow = lv_obj_create(parent);
+    lv_obj_add_style(brow, &st_screen, 0);
+    lv_obj_set_width(brow, lv_pct(100));
+    lv_obj_set_height(brow, 70);
+    lv_obj_set_flex_flow(brow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(brow, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(brow, LV_OBJ_FLAG_SCROLLABLE);
+
+    g_arm_btn = lv_btn_create(brow);
     lv_obj_add_style(g_arm_btn, &st_accent_btn, 0);
-    lv_obj_set_size(g_arm_btn, 320, 64);
+    lv_obj_set_size(g_arm_btn, 300, 60);
     lv_obj_add_event_cb(g_arm_btn, arm_clicked_cb, LV_EVENT_CLICKED, nullptr);
     g_arm_lbl = lv_label_create(g_arm_btn);
     lv_label_set_text(g_arm_lbl, LV_SYMBOL_PLAY " ARM RUN");
     lv_obj_center(g_arm_lbl);
+
+    lv_obj_t* rst = lv_btn_create(brow);
+    lv_obj_add_style(rst, &st_accent_btn, 0);
+    lv_obj_set_size(rst, 240, 60);
+    lv_obj_add_event_cb(rst, reset_peaks_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* rl = lv_label_create(rst);
+    lv_label_set_text(rl, LV_SYMBOL_REFRESH " RESET PEAKS");
+    lv_obj_center(rl);
 }
 
 void screen_performance_update(void) {
@@ -93,6 +133,16 @@ void screen_performance_update(void) {
 
     snprintf(buf, sizeof(buf), "%.0f mph", t.speed_kph * 0.621371f);
     lv_label_set_text(g_speed_val, buf);
+
+    // Session peaks (USA units).
+    snprintf(buf, sizeof(buf), "%.0f", t.peak_rpm);
+    lv_label_set_text(g_pk_rpm, buf);
+    snprintf(buf, sizeof(buf), "%.1f", t.peak_boost_psi);
+    lv_label_set_text(g_pk_boost, buf);
+    snprintf(buf, sizeof(buf), "%.0f", t.peak_coolant_c * 1.8f + 32.0f);
+    lv_label_set_text(g_pk_cool, buf);
+    snprintf(buf, sizeof(buf), "%.0f", t.top_speed_kph * 0.621371f);
+    lv_label_set_text(g_pk_speed, buf);
 
     if (t.accel_0_60_s > 0) {
         snprintf(buf, sizeof(buf), "%.2f", t.accel_0_60_s);

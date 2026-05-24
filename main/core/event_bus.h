@@ -42,6 +42,7 @@ enum class CmdType : uint8_t {
     ReadReadiness,   // OBD Mode 01 PID 01 (MIL + I/M readiness monitors)
     ScanModules,     // enhanced: UDS 0x19 read-DTC across all known modules
     ClearModuleDtcs, // enhanced: UDS 0x14 clear-DTC across all known modules
+    ResetPeaks,      // zero the session peak-hold values
 };
 
 struct ObdCommand {

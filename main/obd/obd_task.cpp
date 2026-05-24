@@ -431,6 +431,12 @@ void applyCommand(const ObdCommand& cmd) {
     case CmdType::Reconnect:
         g_usb.close();   // hotplug task will reopen
         break;
+
+    case CmdType::ResetPeaks:
+        g_telem.peak_rpm = g_telem.peak_boost_psi = 0;
+        g_telem.peak_coolant_c = g_telem.top_speed_kph = 0;
+        ESP_LOGI(TAG, "session peaks reset");
+        break;
     }
 }
 
@@ -561,6 +567,12 @@ void obdTask(void*) {
             vTaskDelay(pdMS_TO_TICKS(50));
             break;
         }
+
+        // --- Session peak-hold ----------------------------------------------
+        if (g_telem.rpm        > g_telem.peak_rpm)       g_telem.peak_rpm = g_telem.rpm;
+        if (g_telem.boost_psi  > g_telem.peak_boost_psi) g_telem.peak_boost_psi = g_telem.boost_psi;
+        if (g_telem.coolant_c  > g_telem.peak_coolant_c) g_telem.peak_coolant_c = g_telem.coolant_c;
+        if (g_telem.speed_kph  > g_telem.top_speed_kph)  g_telem.top_speed_kph = g_telem.speed_kph;
 
         // --- Publish telemetry + measure poll rate --------------------------
         g_telem.last_update_us = esp_timer_get_time();
