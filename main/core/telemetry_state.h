@@ -22,6 +22,14 @@ struct TelemetryState {
     float    afr;                 // air/fuel ratio (from O2/wideband)
     float    battery_v;           // control module voltage   [V]
 
+    // --- Additional standard SAE PIDs ---------------------------------------
+    float    short_fuel_trim;     // STFT bank 1               [%]  (PID 06)
+    float    long_fuel_trim;      // LTFT bank 1               [%]  (PID 07)
+    float    fuel_level_pct;      // fuel tank level           [%]  (PID 2F)
+    float    oil_temp_c;          // engine oil temperature    [degC](PID 5C)
+    float    ambient_c;           // ambient air temperature   [degC](PID 46)
+    uint32_t run_time_s;          // engine run time since start [s] (PID 1F)
+
     // --- Custom / enhanced PIDs (turbo / performance builds) -----------------
     float    boost_psi;           // gauge boost = MAP - baro  [psi]
     float    charge_air_c;        // CACT / post-intercooler  [degC]

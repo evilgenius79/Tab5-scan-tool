@@ -19,13 +19,15 @@ lv_obj_t* g_table = nullptr;
 // One row per parameter. The order here is the display order.
 enum Row {
     R_RPM, R_SPEED, R_MAP, R_BOOST, R_THROTTLE, R_LOAD, R_MAF, R_IGN, R_COOLANT,
-    R_IAT, R_AFR, R_BARO, R_BATT, R_MPG, R_TRIPMPG, R_TRIPMI, R_COUNT
+    R_IAT, R_AFR, R_STFT, R_LTFT, R_FUEL, R_OIL, R_AMBIENT, R_RUNTIME, R_BARO,
+    R_BATT, R_MPG, R_TRIPMPG, R_TRIPMI, R_COUNT
 };
 
 const char* kNames[R_COUNT] = {
     "Engine RPM", "Vehicle Speed", "MAP", "Boost", "Throttle", "Engine Load",
     "Mass Air Flow", "Ignition Adv", "Coolant Temp", "Intake Air Temp", "AFR",
-    "Barometric", "Battery", "MPG (now)", "Trip MPG", "Trip Distance",
+    "Short Fuel Trim", "Long Fuel Trim", "Fuel Level", "Oil Temp", "Ambient Temp",
+    "Run Time", "Barometric", "Battery", "MPG (now)", "Trip MPG", "Trip Distance",
 };
 
 // Session min/max recording (persists while the app runs; paused only while
@@ -105,6 +107,12 @@ void screen_livedata_update(void) {
     set(R_COOLANT,  "%.0f F",    t.coolant_c * 1.8f + 32.0f, 0, true);
     set(R_IAT,      "%.0f F",    t.intake_air_c * 1.8f + 32, 0, true);
     set(R_AFR,      "%.1f",      t.afr,                      1, true);
+    set(R_STFT,     "%+.1f %%",  t.short_fuel_trim,          1, true);
+    set(R_LTFT,     "%+.1f %%",  t.long_fuel_trim,           1, true);
+    set(R_FUEL,     "%.0f %%",   t.fuel_level_pct,           0, true);
+    set(R_OIL,      "%.0f F",    t.oil_temp_c * 1.8f + 32.0f, 0, true);
+    set(R_AMBIENT,  "%.0f F",    t.ambient_c * 1.8f + 32.0f, 0, true);
+    set(R_RUNTIME,  "%.0f s",    (float)t.run_time_s,        0, false);
     set(R_BARO,     "%.1f psi",  t.baro_kpa * 0.1450377f,    1, true);
     set(R_BATT,     "%.2f V",    t.battery_v,                2, true);
     set(R_MPG,      "%.1f mpg",  t.mpg_instant,              1, true);

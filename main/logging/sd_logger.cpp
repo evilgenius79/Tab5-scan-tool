@@ -115,7 +115,8 @@ bool openFile(bool can_mode) {
         // custom/profile PID with its real name + unit, pulled live from custpid.
         fprintf(g_file,
             "timestamp_us,rpm,speed_kph,map_kpa,boost_psi,afr,eng_load_pct,"
-            "maf_gps,coolant_c,iat_c,throttle_pct,ign_adv_deg,battery_v,mpg");
+            "maf_gps,coolant_c,iat_c,throttle_pct,ign_adv_deg,battery_v,mpg,"
+            "stft_pct,ltft_pct,fuel_level_pct,oil_c,ambient_c,run_time_s");
         for (size_t i = 0; i < custpid::count(); ++i) {
             const CustomPid& c = custpid::def(i);
             fprintf(g_file, ",%s[%s]", c.name, c.unit);
@@ -137,11 +138,14 @@ void closeFile() {
 
 void writeTelemetryRow(const TelemetryState& t) {
     fprintf(g_file,
-        "%llu,%.0f,%.1f,%.1f,%.2f,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.2f,%.1f",
+        "%llu,%.0f,%.1f,%.1f,%.2f,%.2f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.2f,%.1f,"
+        "%.1f,%.1f,%.0f,%.0f,%.0f,%u",
         (unsigned long long)t.last_update_us,
         t.rpm, t.speed_kph, t.map_kpa, t.boost_psi, t.afr, t.engine_load,
         t.maf_gps, t.coolant_c, t.intake_air_c, t.throttle_pct,
-        t.ignition_adv_deg, t.battery_v, t.mpg_instant);
+        t.ignition_adv_deg, t.battery_v, t.mpg_instant,
+        t.short_fuel_trim, t.long_fuel_trim, t.fuel_level_pct,
+        t.oil_temp_c, t.ambient_c, (unsigned)t.run_time_s);
     // Live custom/profile PID values (knock retard, charge-air temp, boost, ...).
     for (size_t i = 0; i < custpid::count(); ++i) {
         float v;

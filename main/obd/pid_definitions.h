@@ -89,6 +89,26 @@ inline void ign_adv(const uint8_t* d, uint8_t n, TelemetryState& t) {
     if (n >= 1) t.ignition_adv_deg = (d[0] / 2.0f) - 64.0f;  // SAE PID 0E scaling
 }
 
+// Fuel trims (PID 06/07): (A-128) * 100/128 %, signed about zero.
+inline void stft(const uint8_t* d, uint8_t n, TelemetryState& t) {
+    if (n >= 1) t.short_fuel_trim = ((int)d[0] - 128) * 100.0f / 128.0f;
+}
+inline void ltft(const uint8_t* d, uint8_t n, TelemetryState& t) {
+    if (n >= 1) t.long_fuel_trim = ((int)d[0] - 128) * 100.0f / 128.0f;
+}
+inline void fuel_level(const uint8_t* d, uint8_t n, TelemetryState& t) {
+    if (n >= 1) t.fuel_level_pct = d[0] * 100.0f / 255.0f;   // PID 2F
+}
+inline void oil_temp(const uint8_t* d, uint8_t n, TelemetryState& t) {
+    if (n >= 1) t.oil_temp_c = (int)d[0] - 40;               // PID 5C
+}
+inline void ambient(const uint8_t* d, uint8_t n, TelemetryState& t) {
+    if (n >= 1) t.ambient_c = (int)d[0] - 40;                // PID 46
+}
+inline void run_time(const uint8_t* d, uint8_t n, TelemetryState& t) {
+    if (n >= 2) t.run_time_s = ((uint32_t)d[0] << 8) | d[1]; // PID 1F [s]
+}
+
 } // namespace dec
 
 // --- The polling catalog ----------------------------------------------------
@@ -108,6 +128,12 @@ static const PidDef kPidCatalog[] = {
     { "EngLoad",        "0104",   1,     false,    dec::load       },
     { "AFR",            "0144",   2,     false,    dec::afr        },
     { "Baro",           "0133",   1,     false,    dec::baro       },
+    { "STFT",           "0106",   1,     false,    dec::stft       },
+    { "LTFT",           "0107",   1,     false,    dec::ltft       },
+    { "FuelLevel",      "012F",   1,     false,    dec::fuel_level },
+    { "OilTemp",        "015C",   1,     false,    dec::oil_temp   },
+    { "Ambient",        "0146",   1,     false,    dec::ambient    },
+    { "RunTime",        "011F",   2,     false,    dec::run_time   },
     { "Battery",        "ATRV",   2,     false,    dec::battery    },
 
     // NOTE: real manufacturer parameters (knock retard, charge-air temp, HPFP)
