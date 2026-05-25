@@ -46,7 +46,7 @@ const ChMeta kCh[] = {
     { "AFR",        "",     8,  20,   1,  NONE,  NONE, false },  // 2 (context-dep)
     { "Ign Timing", "deg",-10,  50,   1,  NONE,  NONE, false },  // 3
     { "Coolant",    "F",    0,  260,  0,  220,   240,  false },  // 4 hot
-    { "Intake Air", "F",    0,  250,  0,  150,   180,  false },  // 5 heat soak
+    { "IAT1 (Intake)","F",  0,  250,  0,  150,   180,  false },  // 5 heat soak
     { "Speed",      "mph",  0,  140,  0,  NONE,  NONE, false },  // 6
     { "MAP",        "psi",  0,  kMapFullPsi, 1, NONE, NONE, false }, // 7 (3-bar)
     { "Throttle",   "%",    0,  100,  0,  NONE,  NONE, false },  // 8
@@ -60,6 +60,7 @@ const ChMeta kCh[] = {
     { "Fuel Level",  "%",   0,  100,  0,  15,    5,    true  },  // 16 low = bad
     { "Oil Temp",    "F",   0,  300,  0,  250,   270,  false },  // 17 hot
     { "Ambient",     "F",  -20, 120,  0,  NONE,  NONE, false },  // 18
+    { "IAT2 (Charge)","F",  0,  300,  0,  160,   185,  false },  // 19 charge-air temp
 };
 constexpr int kChCount = sizeof(kCh) / sizeof(kCh[0]);
 
@@ -103,6 +104,21 @@ int boostCustomIdx() {
     return idx;
 }
 
+// IAT2 = post-intercooler charge-air temp. Standard OBD exposes only IAT1
+// (PID 0x0F); the second sensor is a manufacturer PID, so match the charge-air
+// custom/profile PID by name (e.g. Ford "Charge Air Temp"). -1 = none defined.
+int chargeAirCustomIdx() {
+    static int idx = -1;
+    if (idx < 0 && custpid::count() > 0) {
+        for (size_t i = 0; i < custpid::count(); ++i) {
+            const char* nm = custpid::def(i).name;
+            if (containsCI(nm, "charge") || containsCI(nm, "cact") ||
+                containsCI(nm, "iat2")) { idx = (int)i; break; }
+        }
+    }
+    return idx;
+}
+
 float channelValue(int ch, const TelemetryState& t) {
     switch (ch) {
         case 0:  return t.rpm;
@@ -132,6 +148,14 @@ float channelValue(int ch, const TelemetryState& t) {
         case 16: return t.fuel_level_pct;
         case 17: return c_to_f(t.oil_temp_c);
         case 18: return c_to_f(t.ambient_c);
+        case 19: {                                    // IAT2 / charge-air temp
+            // The Ford charge-air custom PID already outputs degF; if none is
+            // defined, fall back to the (standard-decode) charge_air_c field.
+            int ci = chargeAirCustomIdx();
+            float cv;
+            if (ci >= 0 && custpid::getValue(ci, cv)) return cv;
+            return c_to_f(t.charge_air_c);
+        }
         default: return 0;
     }
 }
