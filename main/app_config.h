@@ -99,3 +99,19 @@
 #define UI_GAUGE_REFRESH_MS      33        // ~30 fps gauge/sparkline updates
 #define UI_SNIFFER_DRAIN_MS      50        // sniffer view batch-drain cadence
 #define UI_SNIFFER_MAX_ROWS      200       // visible scrollback before recycling
+
+// -----------------------------------------------------------------------------
+//  Audible alerts (Tab5 speaker)
+// -----------------------------------------------------------------------------
+//  Thresholds that fire a spoken/beeped warning. Each alert plays
+//  /sdcard/sounds/<name>.wav if present (drop in your own voice clip, e.g. a
+//  "knock knock knock" recording), else a synthesized fallback beep. Re-arms
+//  only after the value drops back below (threshold - hysteresis), and won't
+//  repeat within the cooldown.
+#define ALERT_VOLUME_PCT         70
+#define ALERT_COOLDOWN_MS        8000
+#define ALERT_KNOCK_DEG          3.0f      // active knock retard [deg]
+#define ALERT_BOOST_PSI          25.0f     // overboost [psi]
+#define ALERT_COOLANT_F          240.0f    // coolant over-temp [degF]
+#define ALERT_OIL_F              270.0f    // oil over-temp [degF]
+

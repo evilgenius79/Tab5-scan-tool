@@ -16,6 +16,7 @@
 #include "ui/ui.h"
 #include "obd/obd_task.h"
 #include "logging/sd_logger.h"
+#include "audio/alerts.h"
 
 #include "nvs_flash.h"
 #include "esp_log.h"
@@ -42,6 +43,7 @@ extern "C" void app_main(void) {
     // --- 2. UI --------------------------------------------------------------
     ui_init();                 // brings up the BSP (display, I2C, IO expanders)
     tab5pwr::enable_charging(); // turn on the IP2326 charger (needs the I2C bus)
+    alerts::init();             // speaker + threshold-driven audible warnings
     ui_task_start();
 
     // --- 3. I/O + logging tasks --------------------------------------------

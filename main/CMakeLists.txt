@@ -24,6 +24,9 @@ idf_component_register(
         # --- sd card logging ------------------------------------------------
         "logging/sd_logger.cpp"
 
+        # --- audio alerts ---------------------------------------------------
+        "audio/alerts.cpp"
+
         # --- lvgl ui --------------------------------------------------------
         "ui/ui.cpp"
         "ui/ui_theme.cpp"
@@ -52,7 +55,8 @@ idf_component_register(
         usb_host_ftdi_vcp      # FT23x line driver (OBDLink EX)
         usb_host_cp210x_vcp    # clone fallback
         usb_host_ch34x_vcp     # clone fallback
-        m5stack_tab5         # Tab5 BSP (display/touch/SD)
+        m5stack_tab5         # Tab5 BSP (display/touch/SD/audio)
+        esp_codec_dev          # speaker/codec for audible alerts
         fatfs
         nvs_flash
         driver
