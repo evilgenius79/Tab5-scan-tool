@@ -208,6 +208,10 @@ void screen_dash_create(lv_obj_t* parent) {
         size_t sz = NUM_GAUGES;
         nvs_get_blob(g_nvs, "slots", g_slot, &sz);   // leaves defaults if absent
     }
+    // Clamp persisted channel indices: a stale blob (e.g. from a build with more
+    // channels) must not index kCh out of range in applyChannel().
+    for (int i = 0; i < NUM_GAUGES; ++i)
+        if (g_slot[i] >= kChCount) g_slot[i] = 0;
 
     // Build the dropdown option string once.
     g_options[0] = '\0';

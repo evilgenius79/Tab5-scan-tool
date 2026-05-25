@@ -89,15 +89,19 @@ void load(const char* make) {
     if (!g_mtx) g_mtx = xSemaphoreCreateMutex();
 
     const bool is_ford = make && (strstr(make, "Ford") || strstr(make, "Lincoln"));
+    const bool unknown = !make || !*make;   // VIN not read / decode failed
 
     if (loadFromSd()) {
         g_source = "SD";
-    } else if (is_ford) {
+    } else if (is_ford || unknown) {
+        // Apply the built-in Ford EcoBoost defaults for a Ford/Lincoln, and also
+        // when the make is unknown (e.g. the VIN read hiccupped) - that matches
+        // the project's default target and avoids losing enhanced gauges. A
+        // *known* other marque gets nothing, so Ford scaling is never misapplied.
         for (const auto& d : kFordDefaults) addDef(d);
-        g_source = "Ford defaults";
+        g_source = unknown ? "Ford defaults (make unknown)" : "Ford defaults";
     } else {
-        // Unknown / non-Ford make and no SD profile: don't guess scaling.
-        g_source = "none (no profile)";
+        g_source = "none (non-Ford)";
     }
     ESP_LOGI(TAG, "loaded %u custom PIDs (%s) for make '%s'",
              (unsigned)g_count, g_source, make && *make ? make : "?");

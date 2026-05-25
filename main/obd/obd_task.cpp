@@ -328,6 +328,14 @@ void discoverSupportedPids() {
         }
         if (!(mask & 0x1)) break;               // bit0 = "next block supported"
     }
+    // Only latch the scan as done if we actually learned something. A momentary
+    // failure of the 0100 probe must NOT leave every standard PID marked
+    // unsupported (which would stall polling and trip the link watchdog) - in
+    // that case we leave g_pidScanDone false so the loop keeps polling all PIDs.
+    if (found == 0) {
+        ESP_LOGW(TAG, "supported-PID scan found nothing - polling all PIDs");
+        return;
+    }
     g_pidScanDone = true;
 
     // Publish a snapshot for the UI.
