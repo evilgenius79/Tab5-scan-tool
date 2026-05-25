@@ -29,6 +29,14 @@ struct TelemetryState {
     float    hpfp_pressure_bar;   // high-pressure fuel pump  [bar]
     float    ignition_adv_deg;    // commanded ign advance    [deg]
 
+    // --- Air mass + fuel economy / trip computer ----------------------------
+    float    maf_gps;             // mass air flow            [g/s]
+    float    mpg_instant;         // instantaneous economy    [mpg] (0 = n/a)
+    float    trip_distance_mi;    // trip odometer            [mi]
+    float    trip_fuel_gal;       // trip fuel burned         [gal]
+    float    trip_mpg;            // trip average economy     [mpg]
+    uint32_t trip_time_s;         // trip elapsed (engine on) [s]
+
     // --- Derived performance metrics ----------------------------------------
     float    accel_0_60_s;        // last 0-60 mph time       [s] (0 = none yet)
     float    quarter_mile_s;      // last 1/4 mile ET         [s]

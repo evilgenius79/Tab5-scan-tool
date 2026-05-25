@@ -24,6 +24,10 @@ lv_obj_t* g_pk_rpm    = nullptr;
 lv_obj_t* g_pk_boost  = nullptr;
 lv_obj_t* g_pk_cool   = nullptr;
 lv_obj_t* g_pk_speed  = nullptr;
+lv_obj_t* g_mpg_now   = nullptr;
+lv_obj_t* g_trip_mpg  = nullptr;
+lv_obj_t* g_trip_mi   = nullptr;
+lv_obj_t* g_trip_gal  = nullptr;
 
 // Reusable "stat card": big value over a dim caption.
 lv_obj_t* stat_card(lv_obj_t* parent, const char* caption, const char* init) {
@@ -100,6 +104,20 @@ void screen_performance_create(lv_obj_t* parent) {
     g_pk_cool  = stat_card(prow, "MAX COOL (F)", "0");
     g_pk_speed = stat_card(prow, "TOP SPEED",    "0");
 
+    // Fuel economy / trip computer row.
+    lv_obj_t* erow = lv_obj_create(parent);
+    lv_obj_add_style(erow, &st_screen, 0);
+    lv_obj_set_width(erow, lv_pct(100));
+    lv_obj_set_height(erow, 120);
+    lv_obj_set_flex_flow(erow, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(erow, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_clear_flag(erow, LV_OBJ_FLAG_SCROLLABLE);
+    g_mpg_now  = stat_card(erow, "MPG (NOW)",   "--.-");
+    g_trip_mpg = stat_card(erow, "TRIP MPG",    "--.-");
+    g_trip_mi  = stat_card(erow, "TRIP (MI)",   "0.0");
+    g_trip_gal = stat_card(erow, "FUEL (GAL)",  "0.00");
+
     // Button row: arm run + reset peaks.
     lv_obj_t* brow = lv_obj_create(parent);
     lv_obj_add_style(brow, &st_screen, 0);
@@ -143,6 +161,18 @@ void screen_performance_update(void) {
     lv_label_set_text(g_pk_cool, buf);
     snprintf(buf, sizeof(buf), "%.0f", t.top_speed_kph * 0.621371f);
     lv_label_set_text(g_pk_speed, buf);
+
+    // Fuel economy / trip computer.
+    if (t.mpg_instant > 0) snprintf(buf, sizeof(buf), "%.1f", t.mpg_instant);
+    else                   snprintf(buf, sizeof(buf), "--.-");
+    lv_label_set_text(g_mpg_now, buf);
+    if (t.trip_mpg > 0) snprintf(buf, sizeof(buf), "%.1f", t.trip_mpg);
+    else                snprintf(buf, sizeof(buf), "--.-");
+    lv_label_set_text(g_trip_mpg, buf);
+    snprintf(buf, sizeof(buf), "%.1f", t.trip_distance_mi);
+    lv_label_set_text(g_trip_mi, buf);
+    snprintf(buf, sizeof(buf), "%.2f", t.trip_fuel_gal);
+    lv_label_set_text(g_trip_gal, buf);
 
     if (t.accel_0_60_s > 0) {
         snprintf(buf, sizeof(buf), "%.2f", t.accel_0_60_s);

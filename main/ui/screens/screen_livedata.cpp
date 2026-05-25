@@ -18,14 +18,14 @@ lv_obj_t* g_table = nullptr;
 
 // One row per parameter. The order here is the display order.
 enum Row {
-    R_RPM, R_SPEED, R_MAP, R_BOOST, R_THROTTLE, R_LOAD, R_IGN, R_COOLANT,
-    R_IAT, R_AFR, R_BARO, R_BATT, R_COUNT
+    R_RPM, R_SPEED, R_MAP, R_BOOST, R_THROTTLE, R_LOAD, R_MAF, R_IGN, R_COOLANT,
+    R_IAT, R_AFR, R_BARO, R_BATT, R_MPG, R_TRIPMPG, R_TRIPMI, R_COUNT
 };
 
 const char* kNames[R_COUNT] = {
     "Engine RPM", "Vehicle Speed", "MAP", "Boost", "Throttle", "Engine Load",
-    "Ignition Adv", "Coolant Temp", "Intake Air Temp", "AFR",
-    "Barometric", "Battery",
+    "Mass Air Flow", "Ignition Adv", "Coolant Temp", "Intake Air Temp", "AFR",
+    "Barometric", "Battery", "MPG (now)", "Trip MPG", "Trip Distance",
 };
 
 } // namespace
@@ -71,12 +71,16 @@ void screen_livedata_update(void) {
     set(R_BOOST,    "%.1f psi",  t.boost_psi);
     set(R_THROTTLE, "%.0f %%",   t.throttle_pct);
     set(R_LOAD,     "%.0f %%",   t.engine_load);
+    set(R_MAF,      "%.1f g/s",  t.maf_gps);
     set(R_IGN,      "%.1f deg",  t.ignition_adv_deg);
     set(R_COOLANT,  "%.0f F",    t.coolant_c * 1.8f + 32.0f);
     set(R_IAT,      "%.0f F",    t.intake_air_c * 1.8f + 32.0f);
     set(R_AFR,      "%.1f",      t.afr);
     set(R_BARO,     "%.1f psi",  t.baro_kpa * 0.1450377f);
     set(R_BATT,     "%.2f V",    t.battery_v);
+    set(R_MPG,      "%.1f mpg",  t.mpg_instant);
+    set(R_TRIPMPG,  "%.1f mpg",  t.trip_mpg);
+    set(R_TRIPMI,   "%.2f mi",   t.trip_distance_mi);
 
     // Append manufacturer/custom PIDs (loaded from SD or the Ford defaults).
     size_t cc = custpid::count();

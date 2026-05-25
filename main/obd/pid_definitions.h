@@ -58,6 +58,9 @@ inline void map_kpa(const uint8_t* d, uint8_t n, TelemetryState& t) {
 inline void throttle(const uint8_t* d, uint8_t n, TelemetryState& t) {
     if (n >= 1) t.throttle_pct = d[0] * 100.0f / 255.0f;
 }
+inline void maf(const uint8_t* d, uint8_t n, TelemetryState& t) {
+    if (n >= 2) t.maf_gps = ((d[0] << 8) | d[1]) / 100.0f;   // SAE PID 10 [g/s]
+}
 inline void load(const uint8_t* d, uint8_t n, TelemetryState& t) {
     if (n >= 1) t.engine_load = d[0] * 100.0f / 255.0f;   // calculated load [%]
 }
@@ -98,6 +101,7 @@ static const PidDef kPidCatalog[] = {
     { "MAP",            "010B",   1,     false,    dec::map_kpa    },
     { "Speed",          "010D",   1,     false,    dec::speed      },
     { "Throttle",       "0111",   1,     false,    dec::throttle   },
+    { "MAF",            "0110",   2,     false,    dec::maf        },
     { "IgnAdv",         "010E",   1,     false,    dec::ign_adv    },
     { "Coolant",        "0105",   1,     false,    dec::coolant    },
     { "IAT",            "010F",   1,     false,    dec::iat        },

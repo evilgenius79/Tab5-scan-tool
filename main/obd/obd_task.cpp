@@ -187,6 +187,48 @@ void updatePerf() {
 }
 
 // ---------------------------------------------------------------------------
+//  Fuel economy + trip computer. Derives instantaneous MPG from MAF and the
+//  air/fuel ratio, then integrates trip distance and fuel used each poll.
+//    fuel_mass_rate = MAF / AFR                         [g/s]
+//    fuel_vol_rate  = fuel_mass_rate / gasoline_density [gal/s]
+//    MPG            = mph / (gal/s * 3600)
+//  Gasoline density ~2789 g/gal (737 g/L). Uses live AFR when valid, else
+//  stoichiometric 14.7. Accumulates only with the engine running; reset by
+//  CmdType::ResetPeaks.
+// ---------------------------------------------------------------------------
+uint64_t g_trip_last_us = 0;
+float    g_trip_time_acc = 0.0f;   // fractional-second accumulator
+
+void updateTrip() {
+    const uint64_t now = esp_timer_get_time();
+    if (g_trip_last_us == 0) { g_trip_last_us = now; return; }
+    const float dt = (now - g_trip_last_us) / 1e6f;
+    g_trip_last_us = now;
+    if (dt <= 0.0f || dt > 5.0f) return;   // skip gaps (mode switch, scan, ...)
+
+    const float mph = g_telem.speed_kph * 0.621371f;
+    const float afr = (g_telem.afr > 5.0f) ? g_telem.afr : 14.7f;
+    constexpr float kGramsPerGal = 2789.0f;
+
+    if (g_telem.maf_gps > 0.0f) {
+        const float gal_s  = (g_telem.maf_gps / afr) / kGramsPerGal;
+        const float gal_hr = gal_s * 3600.0f;
+        g_telem.mpg_instant = (gal_hr > 1e-4f && mph > 0.5f) ? (mph / gal_hr) : 0.0f;
+        g_telem.trip_distance_mi += (mph / 3600.0f) * dt;
+        g_telem.trip_fuel_gal    += gal_s * dt;
+        g_telem.trip_mpg = (g_telem.trip_fuel_gal > 1e-4f)
+                         ? g_telem.trip_distance_mi / g_telem.trip_fuel_gal : 0.0f;
+    }
+    if (g_telem.rpm > 0.0f) {
+        g_trip_time_acc += dt;
+        if (g_trip_time_acc >= 1.0f) {
+            g_telem.trip_time_s += (uint32_t)g_trip_time_acc;
+            g_trip_time_acc -= (float)(uint32_t)g_trip_time_acc;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 //  Decode Mode 01 PID 01 (I/M readiness). Data bytes A,B,C,D:
 //    A: bit7 MIL on, bits0-6 stored-DTC count.
 //    B: bit3 ignition type (1=compression/diesel); continuous monitors -
@@ -456,7 +498,12 @@ void applyCommand(const ObdCommand& cmd) {
     case CmdType::ResetPeaks:
         g_telem.peak_rpm = g_telem.peak_boost_psi = 0;
         g_telem.peak_coolant_c = g_telem.top_speed_kph = 0;
-        ESP_LOGI(TAG, "session peaks reset");
+        // Reset the trip computer alongside the session peaks.
+        g_telem.trip_distance_mi = g_telem.trip_fuel_gal = 0;
+        g_telem.trip_mpg = g_telem.mpg_instant = 0;
+        g_telem.trip_time_s = 0;
+        g_trip_time_acc = 0.0f;
+        ESP_LOGI(TAG, "session peaks + trip reset");
         break;
     }
 }
@@ -580,6 +627,7 @@ void obdTask(void*) {
             }
             poll_count++;
             updatePerf();
+            updateTrip();
             break;
         }
 
