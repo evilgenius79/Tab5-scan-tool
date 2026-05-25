@@ -10,6 +10,7 @@
 #include "ui/screens/screens.h"
 #include "ui/ui_theme.h"
 #include "core/event_bus.h"
+#include "obd/dtc_lookup.h"
 
 #include <cstdio>
 #include <cstring>
@@ -112,7 +113,7 @@ void screen_modules_update(void) {
     size_t n = bus.getModuleResults(mods, MAX_MODULES);
     lv_table_set_row_count(g_table, n + 1);
 
-    char codes[160];
+    char codes[512];
     for (size_t i = 0; i < n; ++i) {
         lv_table_set_cell_value(g_table, i + 1, 0, mods[i].name);
 
@@ -122,11 +123,14 @@ void screen_modules_update(void) {
         else                           status = LV_SYMBOL_WARNING " FAULT";
         lv_table_set_cell_value(g_table, i + 1, 1, status);
 
+        // One "CODE  Description" per line so faults are readable at a glance.
         codes[0] = '\0';
         for (uint8_t d = 0; d < mods[i].dtc_count; ++d) {
-            strncat(codes, mods[i].dtcs[d].code, sizeof(codes) - strlen(codes) - 2);
-            if (d + 1 < mods[i].dtc_count)
-                strncat(codes, "  ", sizeof(codes) - strlen(codes) - 1);
+            size_t len = strlen(codes);
+            const char* desc = dtc::describe(mods[i].dtcs[d].code);
+            snprintf(codes + len, sizeof(codes) - len, "%s%s%s%s",
+                     d ? "\n" : "", mods[i].dtcs[d].code,
+                     desc ? "  " : "", desc ? desc : "");
         }
         lv_table_set_cell_value(g_table, i + 1, 2,
                                 mods[i].dtc_count ? codes

@@ -4,6 +4,7 @@
 #include "logging/sd_logger.h"
 #include "core/event_bus.h"
 #include "obd/custom_pids.h"
+#include "obd/dtc_lookup.h"
 #include "app_config.h"
 
 #include <cstdio>
@@ -175,6 +176,12 @@ void loggerTask(void*) {
     // adapter connect/init/poll sequence is captured for an in-vehicle review.
     if (sd_card_ensure_mounted()) {
         diag_log_init();
+        // Preload the SD DTC description database now (card is mounted) so code
+        // meanings + the Settings count are ready before the first DTC read,
+        // and the read itself isn't stalled by ~9k lines of file I/O. Runs once
+        // here on this low-priority task; the UI's later ensureLoaded() calls
+        // become no-ops (g_sdResolved is already set).
+        dtc::ensureLoaded();
     }
 
     can_frame_t frame;
