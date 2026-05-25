@@ -144,7 +144,7 @@ const char* findGeneric(const char* code) {
 //  points into it (code/desc are null-terminated in place), so we make few
 //  allocations and keep internal SRAM free.
 // ---------------------------------------------------------------------------
-constexpr size_t kSdMaxEntries = 8000;
+constexpr size_t kSdMaxEntries = 16000;  // full Ford DTC DB is ~9.2k codes
 constexpr size_t kSdMaxFileBytes = 4 * 1024 * 1024;   // sanity cap
 
 char*  g_buf = nullptr;

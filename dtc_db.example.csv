@@ -12,7 +12,8 @@
 #  - The first comma splits the code from the text; commas in the text are fine.
 #  - Codes are matched case-insensitively (stored upper-case).
 #  - Lines beginning with '#' and blank lines are ignored.
-#  - Up to 8000 entries; file up to 4 MB.
+#  - Up to 16000 entries; file up to 4 MB. (The full Ford DB ~9.2k is included
+#    as dtc_db.csv in the repo root - copy that straight to the card.)
 # =============================================================================
 
 # --- Override / extend generic codes -----------------------------------------

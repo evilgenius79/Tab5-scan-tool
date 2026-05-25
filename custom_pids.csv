@@ -1,0 +1,40 @@
+# =============================================================================
+#  custom_pids.csv - manufacturer/enhanced PID definitions for the Tab5 Scan Tool
+# -----------------------------------------------------------------------------
+#  Copy this to the root of the microSD card as:  /sdcard/custom_pids.csv
+#  When present it REPLACES the small built-in Ford default set.
+#
+#  Format (one PID per line, '#' comments + blank lines ignored):
+#      name,request,bytes,signed,scale,offset,unit
+#    name    - label shown in the UI / used as a CSV column header
+#    request - full hex request (mode + PID): "22F40B" = Mode 0x22, DID 0xF40B
+#    bytes   - data bytes to use from the reply (1 or 2)
+#    signed  - 1 if the raw value is signed (two's complement), else 0
+#    scale   - value = raw * scale + offset
+#    offset  - added after scaling, in the final (display) unit
+#    unit    - short unit string (<=7 chars)
+#
+#  Source: 2013 Ford Explorer Sport 3.5 EcoBoost HP Tuners PID list (FordPIDs).
+#  Converted as: scale = ScalarM/ScalarD, offset = Offset / 10^Precision.
+#  These are community/tune figures - VERIFY against your own vehicle.
+#
+#  NOTE: the Boost gauge on the dash auto-prefers any PID whose name contains
+#  "boost", so the enhanced Boost row below drives it (past the 22 psi ceiling
+#  of single-byte standard MAP).
+# =============================================================================
+
+# name,request,bytes,signed,scale,offset,unit  (NO spaces after commas)
+Boost,22F40B,1,0,0.145,-14.1,psi
+Charge Air Temp,22F40F,1,0,1.8,-40,F
+Cyl Head Temp,220334,2,1,0.0277778,32,F
+Knock Retard,2203EC,2,1,0.00195313,0,deg
+Cat Temp B1,22F43C,2,0,0.18,-40,F
+Cat Temp B2,22F43D,2,0,0.18,-40,F
+Trans Temp,221E1C,2,1,0.1125,32,F
+Turbine Speed,221E13,2,0,0.25,0,rpm
+Wastegate DC,220462,2,0,0.00305176,0,pct
+Oil Pressure,220415,2,0,0.145,0,psi
+Fuel Rail Press,22F423,2,0,1.45,0,psi
+Inj Timing,22F45D,2,0,0.0078125,-210,deg
+Engine Torque,221E00,2,0,0.0738,0,ftlb
+MAF,22F410,2,0,0.00132275,0,lb/min
