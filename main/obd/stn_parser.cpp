@@ -76,10 +76,13 @@ bool parseCanFrame(const std::string& line, can_frame_t& out) {
     out.timestamp_us = esp_timer_get_time();
 
     if (tok.size() == 1) {
-        // Packed, no-space form: first 3 chars = 11-bit ID (or 8 = 29-bit).
+        // Packed, no-space form. An 11-bit ID is 3 hex chars + an even number of
+        // data nibbles (total length odd); a 29-bit ID is 8 hex chars + data
+        // (total length even). Use that parity to pick the ID width robustly.
         const std::string& s = tok[0];
         if (s.size() < 4) return false;
-        size_t id_len = (s.size() >= 8 && s.size() % 2 == 0 && s.size() > 19) ? 8 : 3;
+        size_t id_len = (s.size() % 2 == 0) ? 8 : 3;
+        if (s.size() < id_len + 2) return false;
         out.extended = (id_len == 8);
         out.id = parseHexId(s.substr(0, id_len));
         auto bytes = hexBytes(s.substr(id_len));

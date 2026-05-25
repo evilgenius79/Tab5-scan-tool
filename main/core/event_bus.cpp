@@ -149,3 +149,20 @@ size_t EventBus::getModuleResults(ModuleResult* out, size_t max) {
     }
     return n;
 }
+
+// --- Supported PIDs ---------------------------------------------------------
+void EventBus::setSupportedPids(const SupportedPids& sp) {
+    if (xSemaphoreTake(veh_mtx_, pdMS_TO_TICKS(50)) == pdTRUE) {
+        supported_ = sp;
+        xSemaphoreGive(veh_mtx_);
+    }
+}
+
+SupportedPids EventBus::getSupportedPids() {
+    SupportedPids copy{};
+    if (xSemaphoreTake(veh_mtx_, pdMS_TO_TICKS(50)) == pdTRUE) {
+        copy = supported_;
+        xSemaphoreGive(veh_mtx_);
+    }
+    return copy;
+}

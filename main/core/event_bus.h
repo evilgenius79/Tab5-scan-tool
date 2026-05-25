@@ -44,6 +44,7 @@ enum class CmdType : uint8_t {
     ClearModuleDtcs, // enhanced: UDS 0x14 clear-DTC across all known modules
     ResetPeaks,      // zero the session peak-hold values
     ReadFreezeFrame, // OBD Mode 02: sensor conditions captured when a DTC set
+    DiscoverPids,    // OBD Mode 01 PID 00/20/40...: enumerate supported PIDs
 };
 
 struct ObdCommand {
@@ -125,6 +126,22 @@ struct ReadinessInfo {
 };
 
 // -----------------------------------------------------------------------------
+//  Supported standard PIDs (OBD Mode 01 PID 00/20/40/...). A bit per PID number
+//  1..0xFF; the poll scheduler uses this to skip PIDs the ECU doesn't implement,
+//  and the UI can list what's available. `bits` is MSB-first per byte:
+//  PID p supported == bits[p>>3] & (0x80 >> (p&7)).
+// -----------------------------------------------------------------------------
+struct SupportedPids {
+    uint8_t bits[32] = {0};
+    size_t  count = 0;
+    bool    valid = false;
+
+    bool has(uint8_t pid) const {
+        return bits[pid >> 3] & (uint8_t)(0x80 >> (pid & 7));
+    }
+};
+
+// -----------------------------------------------------------------------------
 //  The bus.
 // -----------------------------------------------------------------------------
 class EventBus {
@@ -183,6 +200,10 @@ public:
     std::atomic<bool> module_scan_active{false};   // true while a module scan runs
     std::atomic<bool> dtc_read_active{false};      // true while a DTC read runs
 
+    // --- Supported standard PIDs (guarded by veh_mtx_) ----------------------
+    void          setSupportedPids(const SupportedPids& sp);
+    SupportedPids getSupportedPids();
+
 private:
     EventBus() = default;
 
@@ -204,4 +225,5 @@ private:
     FreezeFrame         freeze_{};
     ModuleResult        modules_[MAX_MODULES]{};
     size_t              module_count_ = 0;
+    SupportedPids       supported_{};
 };

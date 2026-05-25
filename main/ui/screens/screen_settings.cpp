@@ -34,6 +34,7 @@ void baud_cb(lv_event_t* e) {
     if (sel < sizeof(kBauds) / sizeof(kBauds[0])) {
         ObdCommand c{ CmdType::SetBaud, 0, kBauds[sel] };
         EventBus::instance().sendCommand(c, 0);
+        if (g_nvs) { nvs_set_u32(g_nvs, "baud", kBauds[sel]); nvs_commit(g_nvs); }
     }
 }
 
@@ -42,6 +43,7 @@ void bus_cb(lv_event_t* e) {
     ObdCommand c{ CmdType::SelectBus, (uint8_t)(ms ? CanBus::MS_CAN
                                                    : CanBus::HS_CAN), 0 };
     EventBus::instance().sendCommand(c, 0);
+    if (g_nvs) { nvs_set_u8(g_nvs, "bus", ms ? 1 : 0); nvs_commit(g_nvs); }
 }
 
 void bright_cb(lv_event_t* e) {
@@ -80,16 +82,25 @@ void screen_settings_create(lv_obj_t* parent) {
     lv_obj_set_style_pad_row(parent, 12, 0);
 
     // Restore persisted brightness and apply it immediately.
-    uint8_t saved_bright = DEFAULT_BRIGHTNESS;
-    if (nvs_open("settings", NVS_READWRITE, &g_nvs) == ESP_OK)
-        nvs_get_u8(g_nvs, "bright", &saved_bright);
+    uint8_t  saved_bright = DEFAULT_BRIGHTNESS;
+    uint32_t saved_baud   = 0;
+    uint8_t  saved_bus    = 0;
+    if (nvs_open("settings", NVS_READWRITE, &g_nvs) == ESP_OK) {
+        nvs_get_u8(g_nvs,  "bright", &saved_bright);
+        nvs_get_u32(g_nvs, "baud",   &saved_baud);
+        nvs_get_u8(g_nvs,  "bus",    &saved_bus);
+    }
     bsp_display_brightness_set(saved_bright);
 
     // --- Baud rate ----------------------------------------------------------
     lv_obj_t* row = setting_row(parent, "USB Baud Rate");
     g_baud_dd = lv_dropdown_create(row);
     lv_dropdown_set_options(g_baud_dd, "115200\n230400\n500000\n1000000\n2000000");
-    lv_dropdown_set_selected(g_baud_dd, 0);   // adapter opens at 115200 (OBD_DEFAULT_BAUD)
+    // Reflect the persisted choice (the OBD task re-applies it on connect).
+    uint16_t baud_idx = 0;
+    for (uint16_t i = 0; i < sizeof(kBauds) / sizeof(kBauds[0]); ++i)
+        if (kBauds[i] == saved_baud) { baud_idx = i; break; }
+    lv_dropdown_set_selected(g_baud_dd, baud_idx);
     lv_obj_set_width(g_baud_dd, 220);
     lv_obj_add_event_cb(g_baud_dd, baud_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
@@ -98,6 +109,7 @@ void screen_settings_create(lv_obj_t* parent) {
     g_bus_sw = lv_switch_create(row);
     lv_obj_set_size(g_bus_sw, 90, 46);
     lv_obj_set_style_bg_color(g_bus_sw, COL_CYAN, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    if (saved_bus == 1) lv_obj_add_state(g_bus_sw, LV_STATE_CHECKED);
     lv_obj_add_event_cb(g_bus_sw, bus_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     // --- Brightness ---------------------------------------------------------
@@ -148,15 +160,23 @@ void screen_settings_update(void) {
     lv_label_set_text(g_link_lbl, txt);
     lv_obj_set_style_text_color(g_link_lbl, col, 0);
 
-    // SD data-file status: DTC descriptions and custom PIDs, with their source.
+    // SD data-file status: DTC descriptions and custom PIDs, with their source,
+    // plus how many standard PIDs the connected ECU reported as supported.
     if (g_data_lbl) {
         size_t dsd = dtc::sd_count();
         size_t dn  = dsd ? dsd : dtc::embedded_count();
         size_t pn  = custpid::count();
-        char buf[80];
-        snprintf(buf, sizeof(buf), "DTC %u (%s)   PIDs %u (%s)",
-                 (unsigned)dn, dsd ? "SD" : "built-in",
-                 (unsigned)pn, custpid::source());
+        SupportedPids sp = bus.getSupportedPids();
+        char buf[120];
+        if (sp.valid) {
+            snprintf(buf, sizeof(buf), "DTC %u (%s)   PIDs %u (%s)   Supported %u",
+                     (unsigned)dn, dsd ? "SD" : "built-in",
+                     (unsigned)pn, custpid::source(), (unsigned)sp.count);
+        } else {
+            snprintf(buf, sizeof(buf), "DTC %u (%s)   PIDs %u (%s)",
+                     (unsigned)dn, dsd ? "SD" : "built-in",
+                     (unsigned)pn, custpid::source());
+        }
         lv_label_set_text(g_data_lbl, buf);
     }
 }

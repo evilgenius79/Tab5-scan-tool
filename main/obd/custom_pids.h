@@ -35,8 +35,11 @@ struct CustomPid {
 
 namespace custpid {
 
-// Load definitions: SD CSV if present, else built-in Ford defaults. Idempotent.
-void        load();
+// Load definitions: SD /sdcard/custom_pids.csv if present (any make), else the
+// built-in Ford EcoBoost defaults - but ONLY when `make` is a Ford/Lincoln, so
+// Ford-specific scaling is never applied to another marque. Pass the
+// VIN-decoded manufacturer ("" if unknown). Idempotent.
+void        load(const char* make);
 size_t      count();
 const CustomPid& def(size_t i);
 const char* source();                    // "SD" / "Ford defaults" / "none"

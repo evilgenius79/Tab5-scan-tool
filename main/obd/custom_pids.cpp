@@ -83,18 +83,24 @@ bool loadFromSd() {
 
 namespace custpid {
 
-void load() {
+void load(const char* make) {
     if (g_loaded) return;
     g_loaded = true;
     if (!g_mtx) g_mtx = xSemaphoreCreateMutex();
 
+    const bool is_ford = make && (strstr(make, "Ford") || strstr(make, "Lincoln"));
+
     if (loadFromSd()) {
         g_source = "SD";
-    } else {
+    } else if (is_ford) {
         for (const auto& d : kFordDefaults) addDef(d);
         g_source = "Ford defaults";
+    } else {
+        // Unknown / non-Ford make and no SD profile: don't guess scaling.
+        g_source = "none (no profile)";
     }
-    ESP_LOGI(TAG, "loaded %u custom PIDs (%s)", (unsigned)g_count, g_source);
+    ESP_LOGI(TAG, "loaded %u custom PIDs (%s) for make '%s'",
+             (unsigned)g_count, g_source, make && *make ? make : "?");
 }
 
 size_t           count()        { return g_count; }

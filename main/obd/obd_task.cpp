@@ -22,6 +22,7 @@
 #include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "nvs.h"
 
 static const char* TAG = "ObdTask";
 
@@ -101,9 +102,11 @@ void pollPid(const PidDef& pid) {
         return;
     }
 
-    // Decode the request mode/pid from the catalog string (e.g. "010C").
-    uint8_t  mode = (uint8_t)strtoul(std::string(pid.request).substr(0, 2).c_str(), nullptr, 16);
-    uint16_t pidn = (uint16_t)strtoul(std::string(pid.request).substr(2).c_str(), nullptr, 16);
+    // Decode the request mode/pid from the catalog string (e.g. "010C") without
+    // heap churn - this runs on every poll of the hot loop.
+    const char mbuf[3] = { pid.request[0], pid.request[1], '\0' };
+    uint8_t  mode = (uint8_t)strtoul(mbuf, nullptr, 16);
+    uint16_t pidn = (uint16_t)strtoul(pid.request + 2, nullptr, 16);
 
     uint8_t data[16];
     int n = stn::parsePidResponse(resp, mode, pidn, data, sizeof(data));
@@ -199,6 +202,32 @@ void updatePerf() {
 uint64_t g_trip_last_us = 0;
 float    g_trip_time_acc = 0.0f;   // fractional-second accumulator
 
+// --- Trip-computer persistence: survive key-off via NVS ---------------------
+nvs_handle_t g_trip_nvs   = 0;
+uint64_t     g_trip_save_us = 0;
+struct TripBlob { float dist_mi; float fuel_gal; uint32_t time_s; };
+
+void tripRestore() {
+    if (nvs_open("trip", NVS_READWRITE, &g_trip_nvs) != ESP_OK) { g_trip_nvs = 0; return; }
+    TripBlob b{};
+    size_t sz = sizeof(b);
+    if (nvs_get_blob(g_trip_nvs, "trip", &b, &sz) == ESP_OK && sz == sizeof(b)) {
+        g_telem.trip_distance_mi = b.dist_mi;
+        g_telem.trip_fuel_gal    = b.fuel_gal;
+        g_telem.trip_time_s      = b.time_s;
+        g_telem.trip_mpg = (b.fuel_gal > 1e-4f) ? b.dist_mi / b.fuel_gal : 0.0f;
+        ESP_LOGI(TAG, "trip restored: %.1f mi / %.2f gal / %us",
+                 b.dist_mi, b.fuel_gal, (unsigned)b.time_s);
+    }
+}
+
+void tripSave() {
+    if (!g_trip_nvs) return;
+    TripBlob b{ g_telem.trip_distance_mi, g_telem.trip_fuel_gal, g_telem.trip_time_s };
+    nvs_set_blob(g_trip_nvs, "trip", &b, sizeof(b));
+    nvs_commit(g_trip_nvs);
+}
+
 void updateTrip() {
     const uint64_t now = esp_timer_get_time();
     if (g_trip_last_us == 0) { g_trip_last_us = now; return; }
@@ -270,8 +299,64 @@ void decodeReadiness(const uint8_t* d, ReadinessInfo& r) {
 }
 
 // ---------------------------------------------------------------------------
-//  Ford control-module map for enhanced UDS access (response header = req+8).
-//  Used by both the module DTC scan (0x19) and clear (0x14).
+//  Supported standard PIDs (OBD Mode 01 PID 00/20/40/...). The poll scheduler
+//  uses g_pidSupported to skip PIDs the ECU doesn't implement (so we stop
+//  wasting round-trips on NO DATA); until the scan runs we poll everything.
+// ---------------------------------------------------------------------------
+bool g_pidSupported[0x100] = { false };
+bool g_pidScanDone = false;
+
+void discoverSupportedPids() {
+    memset(g_pidSupported, 0, sizeof(g_pidSupported));
+    size_t found = 0;
+    // Walk the "support" PIDs: 0100 -> 01..20, 0120 -> 21..40, ... up to 01E0.
+    for (uint8_t base = 0x00; base <= 0xC0; base += 0x20) {
+        char req[8];
+        snprintf(req, sizeof(req), "01%02X", base);
+        bool ok = false;
+        std::string resp = g_link.sendCommand(req, &ok, 2000);
+        uint8_t d[8];
+        int n = stn::parsePidResponse(resp, 0x01, base, d, sizeof(d));
+        if (n < 4) break;                       // this block unsupported -> stop
+        const uint32_t mask = ((uint32_t)d[0] << 24) | ((uint32_t)d[1] << 16) |
+                              ((uint32_t)d[2] << 8) | d[3];
+        for (int i = 0; i < 32; ++i) {
+            if (mask & (0x80000000u >> i)) {
+                g_pidSupported[(uint8_t)(base + 1 + i)] = true;
+                ++found;
+            }
+        }
+        if (!(mask & 0x1)) break;               // bit0 = "next block supported"
+    }
+    g_pidScanDone = true;
+
+    // Publish a snapshot for the UI.
+    SupportedPids sp{};
+    sp.valid = true;
+    sp.count = found;
+    for (int p = 1; p < 0x100; ++p) {
+        if (g_pidSupported[p]) sp.bits[p >> 3] |= (uint8_t)(0x80 >> (p & 7));
+    }
+    EventBus::instance().setSupportedPids(sp);
+    ESP_LOGI(TAG, "supported-PID scan: %u standard PIDs", (unsigned)found);
+}
+
+// Should this catalog entry be polled? Non-Mode-01 requests (ATRV, ...) always;
+// Mode-01 PIDs only if the scan hasn't run yet or the ECU reported support.
+bool pidIsPollable(const PidDef& p) {
+    if (!g_pidScanDone) return true;
+    if (p.request[0] != '0' || p.request[1] != '1') return true;
+    if (p.request[2] == '\0' || p.request[3] == '\0') return true;
+    uint8_t pid = (uint8_t)strtoul(p.request + 2, nullptr, 16);
+    return g_pidSupported[pid];
+}
+
+// ---------------------------------------------------------------------------
+//  Control-module maps for enhanced UDS access (response header = req+8).
+//  Ford uses manufacturer-specific addresses; for other makes we fall back to
+//  the ISO 15765-4 standard powertrain range (7E0-7E7). Selected per-vehicle
+//  from the VIN-decoded manufacturer so we never probe Ford-only addresses on
+//  another marque. Used by both the module DTC scan (0x19) and clear (0x14).
 // ---------------------------------------------------------------------------
 struct ModuleAddr { const char* name; uint16_t req; };
 const ModuleAddr g_fordModules[] = {
@@ -282,6 +367,26 @@ const ModuleAddr g_fordModules[] = {
     { "Park Aid (PAM)", 0x736 }, { "Restraints",     0x727 },
 };
 constexpr size_t kFordModuleCount = sizeof(g_fordModules) / sizeof(g_fordModules[0]);
+
+// Generic ISO 15765-4 powertrain ECUs - safe to probe on any make.
+const ModuleAddr g_genericModules[] = {
+    { "ECU 1 (7E0)", 0x7E0 }, { "ECU 2 (7E1)", 0x7E1 },
+    { "ECU 3 (7E2)", 0x7E2 }, { "ECU 4 (7E3)", 0x7E3 },
+    { "ECU 5 (7E4)", 0x7E4 }, { "ECU 6 (7E5)", 0x7E5 },
+    { "ECU 7 (7E6)", 0x7E6 }, { "ECU 8 (7E7)", 0x7E7 },
+};
+constexpr size_t kGenericModuleCount = sizeof(g_genericModules) / sizeof(g_genericModules[0]);
+
+// Pick the module map for the connected vehicle from its decoded manufacturer.
+const ModuleAddr* selectModules(size_t& count_out) {
+    VehicleInfo v = EventBus::instance().getVehicleInfo();
+    if (v.valid && (strstr(v.manufacturer, "Ford") || strstr(v.manufacturer, "Lincoln"))) {
+        count_out = kFordModuleCount;
+        return g_fordModules;
+    }
+    count_out = kGenericModuleCount;
+    return g_genericModules;
+}
 
 // Restore OBD functional broadcast addressing after physical-module access.
 //  Order matters: drain any late multi-frame bytes still arriving from the
@@ -377,8 +482,15 @@ void applyCommand(const ObdCommand& cmd) {
         if (info.ecu_name[0]) ESP_LOGI(TAG, "ECU:   %s", info.ecu_name);
 
         bus.setVehicleInfo(info);
+        // Now that the make is known, load the matching enhanced-PID profile
+        // (SD profile for any make, Ford defaults only for a Ford/Lincoln).
+        custpid::load(info.manufacturer);
         break;
     }
+
+    case CmdType::DiscoverPids:
+        discoverSupportedPids();
+        break;
 
     case CmdType::ReadReadiness: {
         // Mode 01 PID 01: MIL + stored-DTC count + emissions-monitor readiness.
@@ -434,10 +546,11 @@ void applyCommand(const ObdCommand& cmd) {
     }
 
     case CmdType::ScanModules: {
-        // Enhanced multi-module DTC scan. Address each Ford control module
-        // directly by its CAN header and run UDS ReadDTCInformation (19 02 FF).
-        const ModuleAddr* kModules = g_fordModules;
-        const size_t nmod = kFordModuleCount;
+        // Enhanced multi-module DTC scan. Address each control module directly
+        // by its CAN header and run UDS ReadDTCInformation (19 02 FF). The map
+        // is chosen from the decoded make (Ford-specific or generic 7E0-7E7).
+        size_t nmod = 0;
+        const ModuleAddr* kModules = selectModules(nmod);
 
         bus.module_scan_active.store(true);
         ModuleResult results[MAX_MODULES];
@@ -490,18 +603,20 @@ void applyCommand(const ObdCommand& cmd) {
     }
 
     case CmdType::ClearModuleDtcs: {
-        // Clear DTCs in every Ford module via UDS ClearDiagnosticInformation
+        // Clear DTCs in every known module via UDS ClearDiagnosticInformation
         // (service 0x14, group 0xFFFFFF = all). Then re-scan to refresh the UI.
         bus.module_scan_active.store(true);
+        size_t nmod = 0;
+        const ModuleAddr* kModules = selectModules(nmod);
         char cmd[16];
-        for (size_t m = 0; m < kFordModuleCount; ++m) {
-            snprintf(cmd, sizeof(cmd), "ATSH%03X", g_fordModules[m].req);
+        for (size_t m = 0; m < nmod; ++m) {
+            snprintf(cmd, sizeof(cmd), "ATSH%03X", kModules[m].req);
             g_link.sendCommand(cmd, &ok);
-            snprintf(cmd, sizeof(cmd), "ATCRA%03X", (g_fordModules[m].req + 8) & 0xFFF);
+            snprintf(cmd, sizeof(cmd), "ATCRA%03X", (kModules[m].req + 8) & 0xFFF);
             g_link.sendCommand(cmd, &ok);
             std::string resp = g_link.sendCommand("14FFFFFF", &ok, 1500);
-            ESP_LOGI(TAG, "clear %-14s %03X -> '%s'", g_fordModules[m].name,
-                     g_fordModules[m].req, resp.c_str());
+            ESP_LOGI(TAG, "clear %-14s %03X -> '%s'", kModules[m].name,
+                     kModules[m].req, resp.c_str());
         }
         restoreFunctionalAddressing();
         // Also clear the standard emissions DTCs / MIL on the PCM.
@@ -543,6 +658,7 @@ void applyCommand(const ObdCommand& cmd) {
         g_telem.trip_mpg = g_telem.mpg_instant = 0;
         g_telem.trip_time_s = 0;
         g_trip_time_acc = 0.0f;
+        tripSave();   // persist the cleared trip so it doesn't return on reboot
         ESP_LOGI(TAG, "session peaks + trip reset");
         break;
     }
@@ -610,6 +726,8 @@ void obdTask(void*) {
         return;
     }
 
+    tripRestore();   // restore the trip computer from the last session
+
     size_t   pid_idx     = 0;
     size_t   cust_idx    = 0;
     uint32_t poll_count  = 0;
@@ -627,12 +745,36 @@ void obdTask(void*) {
             if (g_link.initialize()) {
                 bus.link.store(LinkState::Online);
                 bus.current_baud.store(OBD_DEFAULT_BAUD);
-                custpid::load();   // SD custom_pids.csv or built-in Ford defaults
+
+                // Restore the user's saved adapter preferences. initialize()
+                // always comes up at the default baud / HS-CAN; re-apply the
+                // persisted choices so they survive a power cycle.
+                nvs_handle_t sh;
+                if (nvs_open("settings", NVS_READONLY, &sh) == ESP_OK) {
+                    uint32_t sbaud = 0;
+                    uint8_t  sbus  = 0xFF;
+                    if (nvs_get_u32(sh, "baud", &sbaud) == ESP_OK &&
+                        sbaud && sbaud != OBD_DEFAULT_BAUD) {
+                        g_link.setBaud(sbaud);
+                        bus.current_baud.store(sbaud);
+                    }
+                    if (nvs_get_u8(sh, "bus", &sbus) == ESP_OK && sbus <= 1) {
+                        g_link.selectBus((CanBus)sbus);
+                        bus.bus.store((CanBus)sbus);
+                    }
+                    nvs_close(sh);
+                }
+
                 // Auto-populate identity + emissions status on connect, like a
                 // real scan tool, so Vehicle Info / I/M Readiness / the Home
                 // MIL badge fill in without the user tapping each screen first.
-                applyCommand(ObdCommand{ CmdType::ReadReadiness, 0, 0 });
-                applyCommand(ObdCommand{ CmdType::ReadVin, 0, 0 });
+                // Enqueue (don't run inline) so the live dashboard starts
+                // updating immediately instead of stalling on these multi-frame
+                // reads. ReadVin loads the make-aware custom-PID profile when it
+                // completes; DiscoverPids enumerates supported PIDs.
+                bus.sendCommand(ObdCommand{ CmdType::ReadVin, 0, 0 }, 0);
+                bus.sendCommand(ObdCommand{ CmdType::ReadReadiness, 0, 0 }, 0);
+                bus.sendCommand(ObdCommand{ CmdType::DiscoverPids, 0, 0 }, 0);
             } else {
                 bus.link.store(LinkState::Error);
                 vTaskDelay(pdMS_TO_TICKS(500));
@@ -663,8 +805,13 @@ void obdTask(void*) {
                 g_link.initialize();
                 break;
             }
-            pollPid(kPidCatalog[pid_idx]);
-            pid_idx = (pid_idx + 1) % kPidCount;
+            // Poll the next pollable catalog PID, skipping any the ECU reported
+            // as unsupported (once the discovery scan has run).
+            for (size_t tries = 0; tries < kPidCount; ++tries) {
+                const PidDef& cand = kPidCatalog[pid_idx];
+                pid_idx = (pid_idx + 1) % kPidCount;
+                if (pidIsPollable(cand)) { pollPid(cand); break; }
+            }
             // Interleave one custom/profile PID per loop (knock, CACT, ...).
             if (custpid::count() > 0) {
                 pollCustom(cust_idx);
@@ -712,6 +859,14 @@ void obdTask(void*) {
             poll_count = 0;
             hz_window  = g_telem.last_update_us;
         }
+
+        // Persist the trip computer about once a minute so an unexpected
+        // key-off / unplug loses at most ~60s of accumulation.
+        if (g_telem.last_update_us - g_trip_save_us >= 60000000ULL) {
+            tripSave();
+            g_trip_save_us = g_telem.last_update_us;
+        }
+
         bus.publish(g_telem);
     }
 }
