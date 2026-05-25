@@ -53,6 +53,8 @@ const ChMeta kCh[] = {
     { "Eng Load",   "%",    0,  100,  0,  NONE,  NONE, false },  // 9
     { "Battery",    "V",    8,  16,   1,  12.0f, 11.5f,true  },  // 10 low = bad
     { "Barometric", "psi", 10,  16,   1,  NONE,  NONE, false },  // 11
+    { "Mass Airflow","g/s", 0,  300,  0,  NONE,  NONE, false },  // 12
+    { "MPG",        "mpg",  0,  60,   1,  NONE,  NONE, false },  // 13 instant
 };
 constexpr int kChCount = sizeof(kCh) / sizeof(kCh[0]);
 
@@ -118,6 +120,8 @@ float channelValue(int ch, const TelemetryState& t) {
         case 9:  return t.engine_load;
         case 10: return t.battery_v;
         case 11: return kpa_to_psi(t.baro_kpa);
+        case 12: return t.maf_gps;
+        case 13: return t.mpg_instant;
         default: return 0;
     }
 }

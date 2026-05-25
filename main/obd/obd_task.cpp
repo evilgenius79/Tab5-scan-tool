@@ -673,6 +673,22 @@ void obdTask(void*) {
             poll_count++;
             updatePerf();
             updateTrip();
+
+            // Link watchdog: once we've been decoding data, a long silence
+            // (no PID decoded) means the adapter/bus hung without an echo-reset
+            // - force a re-init to recover. Suppressed during long operations
+            // (module scan, DTC/freeze reads) that legitimately pause polling.
+            if (g_telem.last_good_pid_us != 0 &&
+                !bus.module_scan_active.load() && !bus.dtc_read_active.load() &&
+                !bus.freeze_read_active.load()) {
+                const uint64_t since = esp_timer_get_time() - g_telem.last_good_pid_us;
+                if (since > 8000000ULL) {
+                    ESP_LOGW(TAG, "no PID data for %llus - re-initializing link",
+                             (unsigned long long)(since / 1000000));
+                    g_link.initialize();
+                    g_telem.last_good_pid_us = esp_timer_get_time();  // grace
+                }
+            }
             break;
         }
 
