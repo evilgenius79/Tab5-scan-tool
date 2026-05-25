@@ -53,3 +53,7 @@ void screen_livedata_update(void);
 // Screen 10 - Module scan (enhanced UDS multi-module DTC read).
 void screen_modules_create(lv_obj_t* parent);
 void screen_modules_update(void);
+
+// Screen 11 - Live trend graph (scrolling chart of a selectable parameter).
+void screen_graph_create(lv_obj_t* parent);
+void screen_graph_update(void);

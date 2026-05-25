@@ -20,6 +20,7 @@ enum class ScreenId : int {
     Modules,       // enhanced multi-module DTC scan
     Logging,       // CSV logging toggle + status
     Sniffer,       // raw CAN frame monitor + filters
+    Graph,         // scrolling live trend graph of a selectable parameter
     Settings,      // baud / brightness / bus selection
     _Count
 };
