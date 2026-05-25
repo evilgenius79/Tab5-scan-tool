@@ -28,6 +28,7 @@ lv_obj_t* g_mpg_now   = nullptr;
 lv_obj_t* g_trip_mpg  = nullptr;
 lv_obj_t* g_trip_mi   = nullptr;
 lv_obj_t* g_trip_gal  = nullptr;
+lv_obj_t* g_trip_time = nullptr;
 
 // Reusable "stat card": big value over a dim caption.
 lv_obj_t* stat_card(lv_obj_t* parent, const char* caption, const char* init) {
@@ -113,10 +114,11 @@ void screen_performance_create(lv_obj_t* parent) {
     lv_obj_set_flex_align(erow, LV_FLEX_ALIGN_SPACE_EVENLY, LV_FLEX_ALIGN_CENTER,
                           LV_FLEX_ALIGN_CENTER);
     lv_obj_clear_flag(erow, LV_OBJ_FLAG_SCROLLABLE);
-    g_mpg_now  = stat_card(erow, "MPG (NOW)",   "--.-");
-    g_trip_mpg = stat_card(erow, "TRIP MPG",    "--.-");
-    g_trip_mi  = stat_card(erow, "TRIP (MI)",   "0.0");
-    g_trip_gal = stat_card(erow, "FUEL (GAL)",  "0.00");
+    g_mpg_now   = stat_card(erow, "MPG (NOW)",   "--.-");
+    g_trip_mpg  = stat_card(erow, "TRIP MPG",    "--.-");
+    g_trip_mi   = stat_card(erow, "TRIP (MI)",   "0.0");
+    g_trip_gal  = stat_card(erow, "FUEL (GAL)",  "0.00");
+    g_trip_time = stat_card(erow, "TRIP TIME",   "0:00");
 
     // Button row: arm run + reset peaks.
     lv_obj_t* brow = lv_obj_create(parent);
@@ -173,6 +175,9 @@ void screen_performance_update(void) {
     lv_label_set_text(g_trip_mi, buf);
     snprintf(buf, sizeof(buf), "%.2f", t.trip_fuel_gal);
     lv_label_set_text(g_trip_gal, buf);
+    snprintf(buf, sizeof(buf), "%u:%02u", (unsigned)(t.trip_time_s / 60),
+             (unsigned)(t.trip_time_s % 60));
+    lv_label_set_text(g_trip_time, buf);
 
     if (t.accel_0_60_s > 0) {
         snprintf(buf, sizeof(buf), "%.2f", t.accel_0_60_s);
