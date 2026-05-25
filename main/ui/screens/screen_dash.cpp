@@ -163,13 +163,38 @@ float channelValue(int ch, const TelemetryState& t) {
 constexpr int NUM_GAUGES = 6;
 uint8_t  g_slot[NUM_GAUGES] = { 0, 1, 2, 3, 4, 10 };  // default channel per slot
 
-struct Gauge { lv_obj_t* arc; lv_obj_t* value; lv_obj_t* unit; lv_obj_t* dd; };
+struct Gauge { lv_obj_t* panel; lv_obj_t* arc; lv_obj_t* value; lv_obj_t* unit; lv_obj_t* dd; };
 Gauge      g_gauge[NUM_GAUGES];
 nvs_handle_t g_nvs = 0;
 char       g_options[256];   // newline-joined channel names for the dropdowns
 
+lv_obj_t*  g_parent     = nullptr;   // the tab page (grid container)
+lv_obj_t*  g_layout_btn = nullptr;   // floating layout-cycle button
+lv_obj_t*  g_layout_lbl = nullptr;
+
+// Selectable gauge layouts: 6 (3x2), 4 (2x2), or 2 (1x2 stacked). Fewer gauges
+// => larger arcs. cols drives the grid; rows is always 2.
+struct LayoutCfg { uint8_t visible; uint8_t cols; int16_t arc; const char* label; };
+const LayoutCfg kLayouts[] = {
+    { 6, 3, 160, "6 GAUGES" },
+    { 4, 2, 210, "4 GAUGES" },
+    { 2, 1, 250, "2 GAUGES" },
+};
+constexpr int kLayoutCount = sizeof(kLayouts) / sizeof(kLayouts[0]);
+uint8_t g_layout = 0;
+
+// Grid column templates (rows are always two equal tracks).
+int32_t g_cols3[] = { LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST };
+int32_t g_cols2[] = { LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST };
+int32_t g_cols1[] = { LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST };
+int32_t g_rows2[] = { LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST };
+
 void persist() {
-    if (g_nvs) { nvs_set_blob(g_nvs, "slots", g_slot, NUM_GAUGES); nvs_commit(g_nvs); }
+    if (g_nvs) {
+        nvs_set_blob(g_nvs, "slots", g_slot, NUM_GAUGES);
+        nvs_set_u8(g_nvs, "layout", g_layout);
+        nvs_commit(g_nvs);
+    }
 }
 
 // Apply a channel to a slot: show the unit plus the gauge's scale range so the
@@ -193,10 +218,9 @@ void dd_cb(lv_event_t* e) {
 
 void makeGauge(lv_obj_t* parent, int slot) {
     lv_obj_t* panel = ui_make_panel(parent, nullptr);
-    lv_obj_set_grid_cell(panel, LV_GRID_ALIGN_STRETCH, slot % 3, 1,
-                         LV_GRID_ALIGN_STRETCH, slot / 3, 1);
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
     Gauge& g = g_gauge[slot];
+    g.panel = panel;
 
     // Channel selector dropdown (top of the panel).
     g.dd = lv_dropdown_create(panel);
@@ -234,18 +258,47 @@ void makeGauge(lv_obj_t* parent, int slot) {
     applyChannel(slot);
 }
 
+// Reflow the grid for the current layout: re-template the columns, place the
+// visible gauges, hide the rest, and resize the arcs.
+void applyLayout() {
+    const LayoutCfg& L = kLayouts[g_layout];
+    int32_t* cols = (L.cols == 3) ? g_cols3 : (L.cols == 2) ? g_cols2 : g_cols1;
+    lv_obj_set_grid_dsc_array(g_parent, cols, g_rows2);
+
+    for (int i = 0; i < NUM_GAUGES; ++i) {
+        if (i < L.visible) {
+            lv_obj_clear_flag(g_gauge[i].panel, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_set_grid_cell(g_gauge[i].panel,
+                                 LV_GRID_ALIGN_STRETCH, i % L.cols, 1,
+                                 LV_GRID_ALIGN_STRETCH, i / L.cols, 1);
+            lv_obj_set_size(g_gauge[i].arc, L.arc, L.arc);
+        } else {
+            lv_obj_add_flag(g_gauge[i].panel, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (g_layout_lbl) lv_label_set_text(g_layout_lbl, L.label);
+}
+
+void layout_cb(lv_event_t*) {
+    g_layout = (g_layout + 1) % kLayoutCount;
+    applyLayout();
+    persist();
+}
+
 } // namespace
 
 void screen_dash_create(lv_obj_t* parent) {
-    // Persisted gauge assignments.
+    // Persisted gauge assignments + layout choice.
     if (nvs_open("dash", NVS_READWRITE, &g_nvs) == ESP_OK) {
         size_t sz = NUM_GAUGES;
         nvs_get_blob(g_nvs, "slots", g_slot, &sz);   // leaves defaults if absent
+        nvs_get_u8(g_nvs, "layout", &g_layout);      // leaves default (0) if absent
     }
     // Clamp persisted channel indices: a stale blob (e.g. from a build with more
     // channels) must not index kCh out of range in applyChannel().
     for (int i = 0; i < NUM_GAUGES; ++i)
         if (g_slot[i] >= kChCount) g_slot[i] = 0;
+    if (g_layout >= kLayoutCount) g_layout = 0;
 
     // Build the dropdown option string once.
     g_options[0] = '\0';
@@ -255,12 +308,22 @@ void screen_dash_create(lv_obj_t* parent) {
     }
 
     lv_obj_set_style_pad_all(parent, 8, 0);
-    static int32_t col_dsc[] = { LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST };
-    static int32_t row_dsc[] = { LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST };
-    lv_obj_set_grid_dsc_array(parent, col_dsc, row_dsc);
     lv_obj_set_layout(parent, LV_LAYOUT_GRID);
+    g_parent = parent;
 
     for (int i = 0; i < NUM_GAUGES; ++i) makeGauge(parent, i);
+
+    // Floating layout-cycle button (top-right). FLOATING keeps it out of the
+    // grid flow so it overlays the gauges instead of taking a cell.
+    g_layout_btn = lv_btn_create(parent);
+    lv_obj_add_flag(g_layout_btn, LV_OBJ_FLAG_FLOATING);
+    lv_obj_add_style(g_layout_btn, &st_accent_btn, 0);
+    lv_obj_align(g_layout_btn, LV_ALIGN_TOP_RIGHT, -6, 4);
+    lv_obj_add_event_cb(g_layout_btn, layout_cb, LV_EVENT_CLICKED, nullptr);
+    g_layout_lbl = lv_label_create(g_layout_btn);
+    lv_obj_center(g_layout_lbl);
+
+    applyLayout();   // place gauges + set the button label for the saved layout
 }
 
 void screen_dash_update(void) {
