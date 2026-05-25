@@ -141,7 +141,7 @@ void screen_performance_create(lv_obj_t* parent) {
     lv_obj_set_size(rst, 240, 60);
     lv_obj_add_event_cb(rst, reset_peaks_cb, LV_EVENT_CLICKED, nullptr);
     lv_obj_t* rl = lv_label_create(rst);
-    lv_label_set_text(rl, LV_SYMBOL_REFRESH " RESET PEAKS");
+    lv_label_set_text(rl, LV_SYMBOL_REFRESH " RESET SESSION");
     lv_obj_center(rl);
 }
 

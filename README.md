@@ -22,8 +22,18 @@ standard SAE PIDs are universal; enhanced/module access uses a Ford profile.
   Live Data, Performance (0-60 / ¼-mile + session peaks), Trouble Codes
   (read/clear, all DTC types), Module Scan (multi-ECU read + clear), Vehicle
   Info (VIN/CALID/ECU), I/M Readiness, Data Logging, CAN Sniffer, Settings.
-- **Configurable dash**: each gauge slot picks its parameter from a dropdown;
-  assignments persist in NVS. USA units throughout (mph, °F, psi).
+- **Configurable dash**: each gauge slot picks its parameter from a dropdown
+  (incl. boost, MAF, MPG); assignments persist in NVS. USA units (mph, °F, psi).
+- **Fuel economy + trip computer**: instantaneous and trip-average MPG derived
+  from MAF + AFR, with trip distance/fuel/time (shown on Performance & Live
+  Data, logged to CSV).
+- **Freeze-frame (Mode 02)**: the sensor snapshot the ECU latched when a DTC
+  was set, shown from the Diagnostics screen.
+- **Auto-identify on connect**: VIN and I/M readiness are read automatically, so
+  Vehicle Info, Readiness, and the Home Check-Engine/MIL badge populate without
+  manual taps. Live Data records per-parameter MIN/MAX.
+- **Link watchdog**: a hung adapter/bus (no data for 8 s) triggers an automatic
+  re-init to recover mid-drive.
 - **High-speed CSV logging** to microSD (decoded telemetry or raw CAN), on by
   default and auto-disabled when no card is present. A persistent `diag.log`
   mirrors the console across boots for post-drive review.
