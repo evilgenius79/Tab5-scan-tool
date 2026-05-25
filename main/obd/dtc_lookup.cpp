@@ -254,4 +254,8 @@ const char* describe(const char* code) {
     return findGeneric(code);
 }
 
+size_t sd_count()       { return g_idxCount; }
+size_t embedded_count() { return kGenericCount; }
+bool   sd_resolved()    { return g_sdResolved; }
+
 } // namespace dtc

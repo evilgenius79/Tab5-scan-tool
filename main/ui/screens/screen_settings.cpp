@@ -9,6 +9,8 @@
 #include "ui/screens/screens.h"
 #include "ui/ui_theme.h"
 #include "core/event_bus.h"
+#include "obd/dtc_lookup.h"
+#include "obd/custom_pids.h"
 
 #include "bsp/esp-bsp.h"
 #include "nvs.h"
@@ -20,6 +22,7 @@ lv_obj_t* g_baud_dd   = nullptr;
 lv_obj_t* g_bus_sw    = nullptr;
 lv_obj_t* g_bright_sl = nullptr;
 lv_obj_t* g_link_lbl  = nullptr;
+lv_obj_t* g_data_lbl  = nullptr;
 nvs_handle_t g_nvs    = 0;
 constexpr int DEFAULT_BRIGHTNESS = 80;
 
@@ -86,7 +89,7 @@ void screen_settings_create(lv_obj_t* parent) {
     lv_obj_t* row = setting_row(parent, "USB Baud Rate");
     g_baud_dd = lv_dropdown_create(row);
     lv_dropdown_set_options(g_baud_dd, "115200\n230400\n500000\n1000000\n2000000");
-    lv_dropdown_set_selected(g_baud_dd, 4);   // default 2 Mbit
+    lv_dropdown_set_selected(g_baud_dd, 0);   // adapter opens at 115200 (OBD_DEFAULT_BAUD)
     lv_obj_set_width(g_baud_dd, 220);
     lv_obj_add_event_cb(g_baud_dd, baud_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
@@ -120,6 +123,16 @@ void screen_settings_create(lv_obj_t* parent) {
     lv_obj_t* rl = lv_label_create(rc);
     lv_label_set_text(rl, LV_SYMBOL_REFRESH " RECONNECT");
     lv_obj_center(rl);
+
+    // --- SD data files (DTC database + custom PIDs) -------------------------
+    // Try loading the SD DTC database now so the count reflects reality; the
+    // card is mounted early by the logger, so this usually succeeds here.
+    dtc::ensureLoaded();
+    row = setting_row(parent, "SD Data Files");
+    g_data_lbl = lv_label_create(row);
+    lv_obj_set_style_text_font(g_data_lbl, &lv_font_montserrat_18, 0);
+    lv_obj_set_style_text_color(g_data_lbl, COL_CYAN, 0);
+    lv_label_set_text(g_data_lbl, "...");
 }
 
 void screen_settings_update(void) {
@@ -134,4 +147,16 @@ void screen_settings_update(void) {
     }
     lv_label_set_text(g_link_lbl, txt);
     lv_obj_set_style_text_color(g_link_lbl, col, 0);
+
+    // SD data-file status: DTC descriptions and custom PIDs, with their source.
+    if (g_data_lbl) {
+        size_t dsd = dtc::sd_count();
+        size_t dn  = dsd ? dsd : dtc::embedded_count();
+        size_t pn  = custpid::count();
+        char buf[80];
+        snprintf(buf, sizeof(buf), "DTC %u (%s)   PIDs %u (%s)",
+                 (unsigned)dn, dsd ? "SD" : "built-in",
+                 (unsigned)pn, custpid::source());
+        lv_label_set_text(g_data_lbl, buf);
+    }
 }

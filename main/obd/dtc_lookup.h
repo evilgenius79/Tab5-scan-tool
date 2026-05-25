@@ -16,6 +16,8 @@
 // =============================================================================
 #pragma once
 
+#include <cstddef>   // size_t
+
 namespace dtc {
 
 // Attempt to load the SD database (idempotent). The embedded table needs no
@@ -27,5 +29,12 @@ void ensureLoaded();
 // Return a description for a DTC code, or nullptr if unknown. Lookup order is
 // SD database first, then the embedded generic table.
 const char* describe(const char* code);
+
+// Status for the UI: how many descriptions came from the SD dtc_db.csv (0 if
+// none / not loaded), how many are built into firmware, and whether the SD
+// load has been attempted yet (card mounted).
+size_t sd_count();
+size_t embedded_count();
+bool   sd_resolved();
 
 } // namespace dtc
