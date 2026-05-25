@@ -55,6 +55,11 @@ const ChMeta kCh[] = {
     { "Barometric", "psi", 10,  16,   1,  NONE,  NONE, false },  // 11
     { "Mass Airflow","g/s", 0,  300,  0,  NONE,  NONE, false },  // 12
     { "MPG",        "mpg",  0,  60,   1,  NONE,  NONE, false },  // 13 instant
+    { "Short Fuel Tr","%", -25, 25,   1,  NONE,  NONE, false },  // 14 STFT
+    { "Long Fuel Tr", "%", -25, 25,   1,  NONE,  NONE, false },  // 15 LTFT
+    { "Fuel Level",  "%",   0,  100,  0,  15,    5,    true  },  // 16 low = bad
+    { "Oil Temp",    "F",   0,  300,  0,  250,   270,  false },  // 17 hot
+    { "Ambient",     "F",  -20, 120,  0,  NONE,  NONE, false },  // 18
 };
 constexpr int kChCount = sizeof(kCh) / sizeof(kCh[0]);
 
@@ -122,6 +127,11 @@ float channelValue(int ch, const TelemetryState& t) {
         case 11: return kpa_to_psi(t.baro_kpa);
         case 12: return t.maf_gps;
         case 13: return t.mpg_instant;
+        case 14: return t.short_fuel_trim;
+        case 15: return t.long_fuel_trim;
+        case 16: return t.fuel_level_pct;
+        case 17: return c_to_f(t.oil_temp_c);
+        case 18: return c_to_f(t.ambient_c);
         default: return 0;
     }
 }

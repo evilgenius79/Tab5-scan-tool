@@ -4,8 +4,9 @@
 //  Beyond generic OBD (powertrain only), this reads fault codes from every
 //  control module the tool knows how to address (ABS, airbag, BCM, cluster...).
 //  SCAN sends UDS 0x19 to each module by CAN header; results land in EventBus.
-//  NOTE: module addressing is manufacturer-specific - the built-in map targets
-//  Ford; other makes need their own profile.
+//  NOTE: module addressing is manufacturer-specific. The OBD task picks the map
+//  from the VIN-decoded make: the full Ford set for a Ford/Lincoln, otherwise
+//  the generic ISO 15765-4 powertrain addresses (7E0-7E7).
 // =============================================================================
 #include "ui/screens/screens.h"
 #include "ui/ui_theme.h"
