@@ -36,3 +36,7 @@ int ui_active_screen();
 // Switch the active tab to `screen_index` (a ScreenId value). Used by the home
 // menu cards to jump to a function. Safe to call from the LVGL task.
 void ui_goto_screen(int screen_index);
+
+// Refresh the global top status bar (battery + MIL). Called every slow tick
+// regardless of which screen is visible, so battery/MIL show on every page.
+void ui_topbar_update(void);

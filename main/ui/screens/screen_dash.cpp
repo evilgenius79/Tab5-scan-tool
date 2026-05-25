@@ -307,21 +307,38 @@ void screen_dash_create(lv_obj_t* parent) {
         if (i + 1 < kChCount) strncat(g_options, "\n", sizeof(g_options) - strlen(g_options) - 1);
     }
 
-    lv_obj_set_style_pad_all(parent, 8, 0);
-    lv_obj_set_layout(parent, LV_LAYOUT_GRID);
-    g_parent = parent;
+    lv_obj_set_flex_flow(parent, LV_FLEX_FLOW_COLUMN);
+    lv_obj_set_style_pad_all(parent, 6, 0);
+    lv_obj_set_style_pad_row(parent, 6, 0);
 
-    for (int i = 0; i < NUM_GAUGES; ++i) makeGauge(parent, i);
+    // Dash menu bar across the top: the gauge-layout cycle button lives here so
+    // it never overlaps a gauge's channel dropdown.
+    lv_obj_t* bar = lv_obj_create(parent);
+    lv_obj_add_style(bar, &st_screen, 0);
+    lv_obj_set_width(bar, lv_pct(100));
+    lv_obj_set_height(bar, 48);
+    lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(bar, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(bar, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
 
-    // Floating layout-cycle button (top-right). FLOATING keeps it out of the
-    // grid flow so it overlays the gauges instead of taking a cell.
-    g_layout_btn = lv_btn_create(parent);
-    lv_obj_add_flag(g_layout_btn, LV_OBJ_FLAG_FLOATING);
+    g_layout_btn = lv_btn_create(bar);
     lv_obj_add_style(g_layout_btn, &st_accent_btn, 0);
-    lv_obj_align(g_layout_btn, LV_ALIGN_TOP_RIGHT, -6, 4);
     lv_obj_add_event_cb(g_layout_btn, layout_cb, LV_EVENT_CLICKED, nullptr);
     g_layout_lbl = lv_label_create(g_layout_btn);
     lv_obj_center(g_layout_lbl);
+
+    // Gauge grid fills the rest of the page.
+    lv_obj_t* grid = lv_obj_create(parent);
+    lv_obj_add_style(grid, &st_screen, 0);
+    lv_obj_set_width(grid, lv_pct(100));
+    lv_obj_set_flex_grow(grid, 1);
+    lv_obj_set_style_pad_all(grid, 0, 0);
+    lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_layout(grid, LV_LAYOUT_GRID);
+    g_parent = grid;
+
+    for (int i = 0; i < NUM_GAUGES; ++i) makeGauge(grid, i);
 
     applyLayout();   // place gauges + set the button label for the saved layout
 }

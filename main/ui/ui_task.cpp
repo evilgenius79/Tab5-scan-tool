@@ -29,6 +29,7 @@ static void fast_refresh_cb(lv_timer_t*) {
 }
 
 static void slow_refresh_cb(lv_timer_t*) {
+    ui_topbar_update();   // battery + MIL, on every screen
     switch ((ScreenId)ui_active_screen()) {
     case ScreenId::Home:        screen_home_update();        break;
     case ScreenId::Performance: screen_performance_update(); break;
