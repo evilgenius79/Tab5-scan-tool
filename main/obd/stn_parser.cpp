@@ -232,6 +232,28 @@ size_t parseUdsDtcs(const std::string& resp, DtcRecord* out, size_t max) {
 }
 
 // ---------------------------------------------------------------------------
+//  Mode 02 freeze-frame PID. Response "42 <pid> [frame#] <data...>". Different
+//  ECUs/adapters do or don't echo the frame-number byte after the PID, so we
+//  return the trailing expect_len bytes after the echo - correct either way for
+//  a single-PID request (the data sits at the end of the line).
+// ---------------------------------------------------------------------------
+int parseFreezeFrame(const std::string& resp, uint8_t pid, uint8_t expect_len,
+                     uint8_t* data, size_t max) {
+    if (isErrorResponse(resp)) return -1;
+    auto bytes = hexBytes(resp);
+    for (size_t i = 0; i + 1 < bytes.size(); ++i) {
+        if (bytes[i] != 0x42 || bytes[i + 1] != pid) continue;
+        size_t avail = bytes.size() - (i + 2);          // bytes after the echo
+        if (avail < expect_len) return -1;
+        size_t start = bytes.size() - expect_len;        // trailing data bytes
+        size_t cnt   = std::min<size_t>(expect_len, max);
+        memcpy(data, &bytes[start], cnt);
+        return (int)cnt;
+    }
+    return -1;
+}
+
+// ---------------------------------------------------------------------------
 //  Generic Mode 09 ASCII reply (CALID PID 04, ECU name PID 0A, ...). Same
 //  framing as VIN: find the 49 <pid> echo, skip the NODI count byte, then copy
 //  printable ASCII. NUL bytes (CALID field padding) are skipped; a run of other

@@ -56,6 +56,14 @@ size_t parseUdsDtcs(const std::string& resp, DtcRecord* out, size_t max);
 // (capacity `cap`, NUL-terminated). Returns the number of characters written.
 size_t parseMode09Ascii(const std::string& resp, uint8_t pid, char* out, size_t cap);
 
+// Decode one freeze-frame PID from a Mode 02 reply ("42 <pid> [frame#] <data>").
+// `expect_len` is the PID's data-byte count (e.g. 2 for RPM). The reply may or
+// may not include a leading frame-number byte after the PID, so we return the
+// trailing `expect_len` bytes after the "42 <pid>" echo - robust to both forms.
+// Returns the number of bytes written (== expect_len) or -1 on error/mismatch.
+int parseFreezeFrame(const std::string& resp, uint8_t pid, uint8_t expect_len,
+                     uint8_t* data, size_t max);
+
 // Helper: true if the response is an adapter error token (NO DATA, ?, etc.).
 bool isErrorResponse(const std::string& resp);
 

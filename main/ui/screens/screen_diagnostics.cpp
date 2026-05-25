@@ -22,6 +22,8 @@ size_t    g_shown  = (size_t)-1;   // last rendered count (avoids needless redra
 bool      g_vin_shown = false;     // whether a VIN has been rendered yet
 bool      g_reading = false;       // a READ is in progress (for completion text)
 bool      g_saw_active = false;    // observed the OBD task's read flag go true
+bool      g_ff_reading = false;    // a freeze-frame read is in progress
+bool      g_ff_saw_active = false; // observed the freeze-frame read flag go true
 
 void vin_cb(lv_event_t*) {
     ObdCommand c{ CmdType::ReadVin, 0, 0 };
@@ -40,6 +42,14 @@ void read_cb(lv_event_t*) {
     g_shown = (size_t)-1;          // force refresh on next update
     g_reading = true;
     g_saw_active = false;
+}
+
+void freeze_cb(lv_event_t*) {
+    ObdCommand c{ CmdType::ReadFreezeFrame, 0, 0 };
+    EventBus::instance().sendCommand(c, 0);
+    lv_label_set_text(g_status, LV_SYMBOL_REFRESH " Reading freeze frame...");
+    g_ff_reading = true;
+    g_ff_saw_active = false;
 }
 
 void clear_confirm_cb(lv_event_t* e) {
@@ -102,6 +112,13 @@ void screen_diagnostics_create(lv_obj_t* parent) {
     lv_label_set_text(vl, LV_SYMBOL_LIST " VIN");
     lv_obj_center(vl);
 
+    lv_obj_t* ff_btn = lv_btn_create(bar);
+    lv_obj_add_style(ff_btn, &st_accent_btn, 0);
+    lv_obj_add_event_cb(ff_btn, freeze_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* fl = lv_label_create(ff_btn);
+    lv_label_set_text(fl, LV_SYMBOL_IMAGE " FREEZE");
+    lv_obj_center(fl);
+
     g_status = lv_label_create(bar);
     lv_obj_add_style(g_status, &st_label_dim, 0);
     lv_label_set_text(g_status, "Idle");
@@ -137,6 +154,38 @@ void screen_diagnostics_update(void) {
     if (active) g_saw_active = true;
     const bool just_done = (g_reading && g_saw_active && !active);
     if (just_done) g_reading = false;
+
+    // Freeze-frame read completion -> pop a results dialog.
+    bool ff_active = EventBus::instance().freeze_read_active.load();
+    if (ff_active) g_ff_saw_active = true;
+    if (g_ff_reading && g_ff_saw_active && !ff_active) {
+        g_ff_reading = false;
+        FreezeFrame ff = EventBus::instance().getFreezeFrame();
+        lv_obj_t* mbox = lv_msgbox_create(nullptr);
+        lv_msgbox_add_title(mbox, "Freeze Frame (Mode 02)");
+        char body[256];
+        const bool has_data = ff.valid && (ff.dtc[0] || ff.rpm > 0 || ff.coolant_c != 0);
+        if (!has_data) {
+            snprintf(body, sizeof(body),
+                     "No freeze-frame data stored.\n"
+                     "(The ECU captures one only when an emissions DTC is set.)");
+        } else {
+            snprintf(body, sizeof(body),
+                     "Triggered by: %s\n\n"
+                     "RPM: %.0f      Load: %.0f%%\n"
+                     "Coolant: %.0f F   Intake: %.0f F\n"
+                     "Speed: %.0f mph   Throttle: %.0f%%\n"
+                     "MAP: %.0f kPa     Timing: %.1f deg\n"
+                     "MAF: %.1f g/s",
+                     ff.dtc[0] ? ff.dtc : "(unknown)",
+                     ff.rpm, ff.load, ff.coolant_c * 1.8f + 32.0f,
+                     ff.intake_air_c * 1.8f + 32.0f, ff.speed_kph * 0.621371f,
+                     ff.throttle_pct, ff.map_kpa, ff.ign_adv_deg, ff.maf_gps);
+        }
+        lv_msgbox_add_text(mbox, body);
+        lv_msgbox_add_close_button(mbox);
+        lv_label_set_text(g_status, LV_SYMBOL_OK " Freeze frame read");
+    }
 
     // Refresh the VIN line once a read has produced a result.
     if (!g_vin_shown) {

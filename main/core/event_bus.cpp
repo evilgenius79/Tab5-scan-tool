@@ -113,6 +113,23 @@ ReadinessInfo EventBus::getReadiness() {
     return copy;
 }
 
+// --- Freeze frame -----------------------------------------------------------
+void EventBus::setFreezeFrame(const FreezeFrame& ff) {
+    if (xSemaphoreTake(veh_mtx_, pdMS_TO_TICKS(50)) == pdTRUE) {
+        freeze_ = ff;
+        xSemaphoreGive(veh_mtx_);
+    }
+}
+
+FreezeFrame EventBus::getFreezeFrame() {
+    FreezeFrame copy{};
+    if (xSemaphoreTake(veh_mtx_, pdMS_TO_TICKS(50)) == pdTRUE) {
+        copy = freeze_;
+        xSemaphoreGive(veh_mtx_);
+    }
+    return copy;
+}
+
 // --- Module scan results ----------------------------------------------------
 void EventBus::setModuleResults(const ModuleResult* mods, size_t count) {
     if (count > MAX_MODULES) count = MAX_MODULES;

@@ -43,6 +43,7 @@ enum class CmdType : uint8_t {
     ScanModules,     // enhanced: UDS 0x19 read-DTC across all known modules
     ClearModuleDtcs, // enhanced: UDS 0x14 clear-DTC across all known modules
     ResetPeaks,      // zero the session peak-hold values
+    ReadFreezeFrame, // OBD Mode 02: sensor conditions captured when a DTC set
 };
 
 struct ObdCommand {
@@ -102,6 +103,17 @@ struct ModuleResult {
 };
 static constexpr size_t MAX_MODULES = 14;
 
+// -----------------------------------------------------------------------------
+//  Freeze-frame snapshot (OBD Mode 02): the sensor values the ECU latched at
+//  the instant a fault was confirmed. `dtc` is the code that triggered it.
+// -----------------------------------------------------------------------------
+struct FreezeFrame {
+    bool  valid = false;
+    char  dtc[6] = {0};       // triggering DTC, e.g. "P0301" ("" if none)
+    float rpm = 0, load = 0, coolant_c = 0, speed_kph = 0, map_kpa = 0;
+    float throttle_pct = 0, ign_adv_deg = 0, intake_air_c = 0, maf_gps = 0;
+};
+
 struct ReadinessInfo {
     bool             valid = false;
     bool             mil_on = false;       // malfunction indicator lamp
@@ -160,6 +172,11 @@ public:
     void          setReadiness(const ReadinessInfo& info);
     ReadinessInfo getReadiness();
 
+    // --- Freeze frame (guarded by veh_mtx_) ---------------------------------
+    void        setFreezeFrame(const FreezeFrame& ff);
+    FreezeFrame getFreezeFrame();
+    std::atomic<bool> freeze_read_active{false};   // true while a Mode 02 read runs
+
     // --- Module scan results (guarded by veh_mtx_) --------------------------
     void   setModuleResults(const ModuleResult* mods, size_t count);
     size_t getModuleResults(ModuleResult* out, size_t max);
@@ -184,6 +201,7 @@ private:
     SemaphoreHandle_t   veh_mtx_    = nullptr;
     VehicleInfo         vehicle_{};
     ReadinessInfo       readiness_{};
+    FreezeFrame         freeze_{};
     ModuleResult        modules_[MAX_MODULES]{};
     size_t              module_count_ = 0;
 };

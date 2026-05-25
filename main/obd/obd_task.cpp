@@ -393,6 +393,46 @@ void applyCommand(const ObdCommand& cmd) {
         break;
     }
 
+    case CmdType::ReadFreezeFrame: {
+        // OBD Mode 02: the sensor snapshot the ECU latched when a DTC was
+        // confirmed. Frame 00 is the standard freeze frame. Request format is
+        // "02 <pid> 00"; the value PIDs reuse the Mode 01 scaling.
+        bus.freeze_read_active.store(true);
+        FreezeFrame ff{};
+        uint8_t d[8];
+
+        // PID 02 = the DTC that triggered the freeze frame.
+        std::string rd = g_link.sendCommand("020200", &ok, 1500);
+        if (stn::parseFreezeFrame(rd, 0x02, 2, d, sizeof(d)) == 2 && (d[0] | d[1])) {
+            static const char dom[4] = { 'P', 'C', 'B', 'U' };
+            uint16_t raw = (d[0] << 8) | d[1];
+            ff.dtc[0] = dom[(raw >> 14) & 0x3];
+            ff.dtc[1] = '0' + ((raw >> 12) & 0x3);
+            snprintf(&ff.dtc[2], 4, "%03X", raw & 0x0FFF);
+        }
+
+        // Value PIDs (same scaling as Mode 01). Each: request, pid, len.
+        auto rdv = [&](const char* req, uint8_t pid, uint8_t len) -> int {
+            std::string r = g_link.sendCommand(req, &ok, 1200);
+            return stn::parseFreezeFrame(r, pid, len, d, sizeof(d));
+        };
+        if (rdv("020C00", 0x0C, 2) == 2) ff.rpm          = ((d[0] << 8) | d[1]) / 4.0f;
+        if (rdv("020400", 0x04, 1) == 1) ff.load         = d[0] * 100.0f / 255.0f;
+        if (rdv("020500", 0x05, 1) == 1) ff.coolant_c    = (int)d[0] - 40;
+        if (rdv("020D00", 0x0D, 1) == 1) ff.speed_kph    = d[0];
+        if (rdv("020B00", 0x0B, 1) == 1) ff.map_kpa      = d[0];
+        if (rdv("021100", 0x11, 1) == 1) ff.throttle_pct = d[0] * 100.0f / 255.0f;
+        if (rdv("020E00", 0x0E, 1) == 1) ff.ign_adv_deg  = (d[0] / 2.0f) - 64.0f;
+        if (rdv("020F00", 0x0F, 1) == 1) ff.intake_air_c = (int)d[0] - 40;
+        if (rdv("021000", 0x10, 2) == 2) ff.maf_gps      = ((d[0] << 8) | d[1]) / 100.0f;
+        ff.valid = true;
+        bus.setFreezeFrame(ff);
+        bus.freeze_read_active.store(false);
+        ESP_LOGI(TAG, "freeze frame: DTC=%s RPM=%.0f load=%.0f%% coolant=%.0fC",
+                 ff.dtc[0] ? ff.dtc : "(none)", ff.rpm, ff.load, ff.coolant_c);
+        break;
+    }
+
     case CmdType::ScanModules: {
         // Enhanced multi-module DTC scan. Address each Ford control module
         // directly by its CAN header and run UDS ReadDTCInformation (19 02 FF).
