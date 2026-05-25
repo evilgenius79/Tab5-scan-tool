@@ -588,6 +588,11 @@ void obdTask(void*) {
                 bus.link.store(LinkState::Online);
                 bus.current_baud.store(OBD_DEFAULT_BAUD);
                 custpid::load();   // SD custom_pids.csv or built-in Ford defaults
+                // Auto-populate identity + emissions status on connect, like a
+                // real scan tool, so Vehicle Info / I/M Readiness / the Home
+                // MIL badge fill in without the user tapping each screen first.
+                applyCommand(ObdCommand{ CmdType::ReadReadiness, 0, 0 });
+                applyCommand(ObdCommand{ CmdType::ReadVin, 0, 0 });
             } else {
                 bus.link.store(LinkState::Error);
                 vTaskDelay(pdMS_TO_TICKS(500));

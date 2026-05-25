@@ -9,6 +9,7 @@
 #include "ui/ui.h"
 #include "ui/ui_theme.h"
 #include "core/tab5_power.h"
+#include "core/event_bus.h"
 
 #include <cstdint>   // intptr_t
 #include <cstdio>    // snprintf
@@ -31,6 +32,7 @@ const MenuItem kItems[] = {
 };
 
 lv_obj_t* g_charge = nullptr;   // charge-status indicator in the header
+lv_obj_t* g_mil    = nullptr;   // MIL / stored-DTC status badge in the header
 
 void card_cb(lv_event_t* e) {
     int target = (int)(intptr_t)lv_event_get_user_data(e);
@@ -53,6 +55,13 @@ void screen_home_create(lv_obj_t* parent) {
     lv_obj_set_style_text_font(g_charge, &lv_font_montserrat_20, 0);
     lv_obj_align(g_charge, LV_ALIGN_TOP_RIGHT, -8, 0);
     lv_label_set_text(g_charge, LV_SYMBOL_BATTERY_FULL);
+
+    // MIL / Check-Engine badge (top-center) - filled by the auto readiness read.
+    g_mil = lv_label_create(parent);
+    lv_obj_set_style_text_font(g_mil, &lv_font_montserrat_20, 0);
+    lv_obj_align(g_mil, LV_ALIGN_TOP_MID, 0, 2);
+    lv_obj_set_style_text_color(g_mil, COL_TEXT_DIM, 0);
+    lv_label_set_text(g_mil, LV_SYMBOL_WARNING " status --");
 
     // Card grid: flex-wrap so it lays out responsively.
     lv_obj_t* grid = lv_obj_create(parent);
@@ -113,4 +122,27 @@ void screen_home_update(void) {
     lv_label_set_text(g_charge, buf);
     lv_obj_set_style_text_color(g_charge,
         charging ? COL_GREEN : (pct >= 0 && pct < 15 ? COL_RED : COL_TEXT), 0);
+
+    // MIL / Check-Engine badge from the (auto-read) I/M readiness snapshot.
+    if (g_mil) {
+        ReadinessInfo r = EventBus::instance().getReadiness();
+        char mbuf[48];
+        if (!r.valid) {
+            lv_label_set_text(g_mil, LV_SYMBOL_WARNING " status --");
+            lv_obj_set_style_text_color(g_mil, COL_TEXT_DIM, 0);
+        } else if (r.mil_on) {
+            snprintf(mbuf, sizeof(mbuf), LV_SYMBOL_WARNING " CHECK ENGINE  (%u DTC)",
+                     (unsigned)r.dtc_count);
+            lv_label_set_text(g_mil, mbuf);
+            lv_obj_set_style_text_color(g_mil, COL_RED, 0);
+        } else if (r.dtc_count > 0) {
+            snprintf(mbuf, sizeof(mbuf), LV_SYMBOL_WARNING " %u stored code%s",
+                     (unsigned)r.dtc_count, r.dtc_count == 1 ? "" : "s");
+            lv_label_set_text(g_mil, mbuf);
+            lv_obj_set_style_text_color(g_mil, COL_AMBER, 0);
+        } else {
+            lv_label_set_text(g_mil, LV_SYMBOL_OK " No MIL");
+            lv_obj_set_style_text_color(g_mil, COL_GREEN, 0);
+        }
+    }
 }
