@@ -20,6 +20,7 @@
 #include "core/event_bus.h"
 #include "logging/sd_logger.h"   // sd_card_ensure_mounted()
 
+#include "bsp/esp-bsp.h"         // bsp_io_expander_init + EXT5V enable
 #include "driver/uart.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -235,7 +236,20 @@ void gpsTask(void*) {
 
 namespace gps {
 
+// Drive EXT5V_EN (PI4IOE5V6408 #1 @0x43, pin 2, active-high) so Port A gets 5V.
+void enableExt5v() {
+    esp_io_expander_handle_t exp = bsp_io_expander_init();
+    if (!exp) { ESP_LOGW(TAG, "IO expander init failed; Port A may stay unpowered"); return; }
+    esp_io_expander_set_dir(exp, IO_EXPANDER_PIN_NUM_2, IO_EXPANDER_OUTPUT);
+    esp_io_expander_set_output_mode(exp, IO_EXPANDER_PIN_NUM_2, IO_EXPANDER_OUTPUT_MODE_PUSH_PULL);
+    esp_io_expander_set_level(exp, IO_EXPANDER_PIN_NUM_2, 1);
+    ESP_LOGI(TAG, "EXT_5V enabled (Port A power on)");
+}
+
 void start() {
+#if GPS_ENABLE_EXT5V
+    enableExt5v();
+#endif
     uart_config_t cfg = {};
     cfg.baud_rate  = GPS_BAUD;
     cfg.data_bits  = UART_DATA_8_BITS;

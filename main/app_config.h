@@ -131,6 +131,13 @@
 #define GPS_UART_TX_PIN          54        // P4 GPIO -> module RX  (Port A)
 #define GPS_BAUD                 9600      // bare u-blox default; M5 unit = 38400
 
+//  Port A (and the other external connectors) get 5V only when EXT5V_EN is
+//  asserted: PI4IOE5V6408 #1 (I2C 0x43, the BSP's first IO expander), pin 2,
+//  active-high - the same rail M5.Power.setExtOutput() toggles. The Espressif
+//  BSP never drives it, so the port is dead until we do. Set to 0 if the module
+//  is powered externally. (The pin is IO_EXPANDER_PIN_NUM_2 on bsp_io_expander.)
+#define GPS_ENABLE_EXT5V         1
+
 //  Prefer GPS ground speed over OBD VSS for the 0-60 / quarter-mile timers when
 //  a fix is available. Accurate trap speed, but only as fine as the GPS update
 //  rate (1 Hz at the default baud). Set to 0 to always time off OBD VSS.

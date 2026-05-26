@@ -185,11 +185,18 @@ What it enables:
 - **GPS columns in the telemetry CSV** (`gps_lat`, `gps_lon`, `gps_speed_kph`,
   `gps_course`, `gps_alt_m`, `gps_sats`).
 
+**Port A 5V:** the Tab5's external connectors share one switched `EXT_5V` rail
+that is **off at boot** (gated by `EXT5V_EN` = PI4IOE5V6408 #1 @ I2C 0x43, pin 2,
+active-high — the same rail Arduino's `M5.Power.setExtOutput()` toggles). The
+stock Espressif BSP never drives it, so the driver asserts it during GPS bring-up
+(`GPS_ENABLE_EXT5V`); set that to 0 if the module is powered externally.
+
 Configuration (`app_config.h`): `GPS_ENABLED`, `GPS_UART_NUM` (1),
 `GPS_UART_RX_PIN` (53), `GPS_UART_TX_PIN` (54), `GPS_BAUD` (9600),
-`PERF_USE_GPS`. If the module isn't wired up, leave `GPS_ENABLED` at 1 — the
-GPS screen just shows "acquiring"/"no module" and nothing else is affected. If
-no fix ever appears, the RX/TX pins are likely swapped.
+`GPS_ENABLE_EXT5V` (1), `PERF_USE_GPS`. If the module isn't wired up, leave
+`GPS_ENABLED` at 1 — the GPS screen just shows "acquiring"/"no module" and
+nothing else is affected. If no fix ever appears, the RX/TX pins are likely
+swapped.
 
 ---
 
