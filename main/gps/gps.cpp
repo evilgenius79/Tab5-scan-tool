@@ -165,6 +165,9 @@ void trackAppend(const GpsFix& f) {
 }
 
 unsigned g_nmea_ok = 0;   // count of checksum-valid NMEA sentences (diagnostic)
+unsigned g_fix_seq = 0;   // ++ per published RMC fix (for rate measurement)
+std::atomic<uint32_t> g_link_baud{GPS_BAUD};
+std::atomic<float>    g_fix_hz{0.0f};
 
 void parseLine(char* line) {
     if (!checksumOk(line)) return;
@@ -190,6 +193,7 @@ void parseLine(char* line) {
         g_fix.valid = true;
         EventBus::instance().setGps(g_fix);
         EventBus::instance().gps_present.store(true);
+        ++g_fix_seq;
         trackAppend(g_fix);
     } else if (isType(fields[0], "GGA") && n >= 10) {
         // $..GGA,time,lat,N/S,lon,E/W,fixqual,numsat,hdop,alt,M,...
@@ -274,6 +278,11 @@ void gpsTask(void*) {
     // Auto-baud: if no valid NMEA arrives, cycle target <-> factory baud.
     const uint32_t kBauds[] = { GPS_BAUD, GPS_FACTORY_BAUD };
     size_t baud_idx = 0;
+    g_link_baud.store(kBauds[baud_idx]);
+
+    // Fix-rate measurement (published over the 1 s window).
+    uint64_t hz_t0   = esp_timer_get_time();
+    unsigned hz_seq0 = 0;
 
     // RX diagnostic: every 5 s report bytes received vs valid sentences parsed,
     // so a wiring fault (0 bytes) is distinguishable from a baud mismatch
@@ -301,6 +310,11 @@ void gpsTask(void*) {
         }
 
         uint64_t now = esp_timer_get_time();
+        if (now - hz_t0 >= 1000000ULL) {            // publish measured fix rate
+            g_fix_hz.store((g_fix_seq - hz_seq0) * 1e6f / (now - hz_t0));
+            hz_seq0 = g_fix_seq;
+            hz_t0   = now;
+        }
         if (g_nmea_ok < 4 && now >= next_diag) {    // quiet once clearly working
             next_diag = now + 5000000ULL;
             if (g_nmea_ok > 0) {
@@ -309,6 +323,7 @@ void gpsTask(void*) {
                 // Bytes arrive but none parse -> wrong baud; try the next one.
                 baud_idx = (baud_idx + 1) % (sizeof(kBauds) / sizeof(kBauds[0]));
                 uart_set_baudrate(kUart, kBauds[baud_idx]);
+                g_link_baud.store(kBauds[baud_idx]);
                 ESP_LOGW(TAG, "rx %u bytes/5s but 0 valid NMEA (sample: \"%s\") - "
                               "retrying at %u baud", (unsigned)rx_window, sample,
                          (unsigned)kBauds[baud_idx]);
@@ -369,6 +384,8 @@ void        track_set(bool on) { g_track_want.store(on); }
 bool        track_active()     { return g_track_on.load(); }
 uint32_t    track_points()     { return g_track_pts.load(); }
 const char* track_path()       { return g_track_file; }
+uint32_t    link_baud()        { return g_link_baud.load(); }
+float       fix_hz()           { return g_fix_hz.load(); }
 
 } // namespace gps
 
@@ -381,6 +398,8 @@ void        track_set(bool)   {}
 bool        track_active()    { return false; }
 uint32_t    track_points()    { return 0; }
 const char* track_path()      { return ""; }
+uint32_t    link_baud()       { return 0; }
+float       fix_hz()          { return 0.0f; }
 }
 
 #endif

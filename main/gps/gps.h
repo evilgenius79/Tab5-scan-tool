@@ -23,4 +23,8 @@ bool        track_active();      // true once the file is actually open
 uint32_t    track_points();      // trackpoints written this session
 const char* track_path();        // current/last GPX filename ("" if none)
 
+// --- Link status (for the GPS screen) ---------------------------------------
+uint32_t    link_baud();         // UART baud the reader is currently locked to
+float       fix_hz();            // measured position-fix update rate (Hz)
+
 } // namespace gps

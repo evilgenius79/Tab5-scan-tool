@@ -19,9 +19,19 @@ lv_obj_t* g_fix_lbl   = nullptr;
 lv_obj_t* g_coord_lbl = nullptr;
 lv_obj_t* g_speed_lbl = nullptr;
 lv_obj_t* g_alt_lbl   = nullptr;
+lv_obj_t* g_link_lbl  = nullptr;
 lv_obj_t* g_rec_btn   = nullptr;
 lv_obj_t* g_rec_lbl   = nullptr;
 lv_obj_t* g_trk_lbl   = nullptr;
+
+// Course over ground -> 16-point compass (N, NNE, NE, ...).
+const char* cardinal(float deg) {
+    static const char* dirs[16] = {"N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+                                    "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"};
+    if (deg < 0.0f) deg += 360.0f;
+    int idx = (int)((deg + 11.25f) / 22.5f) & 15;
+    return dirs[idx];
+}
 
 lv_obj_t* info_row(lv_obj_t* parent, const char* caption) {
     lv_obj_t* row = ui_make_panel(parent, nullptr);
@@ -56,6 +66,7 @@ void screen_gps_create(lv_obj_t* parent) {
     g_coord_lbl = info_row(parent, "POSITION");
     g_speed_lbl = info_row(parent, "SPEED / HEADING");
     g_alt_lbl   = info_row(parent, "ALTITUDE / HDOP");
+    g_link_lbl  = info_row(parent, "LINK");
 
     // Track recording control.
     lv_obj_t* trow = ui_make_panel(parent, "GPX TRACK LOG");
@@ -99,13 +110,18 @@ void screen_gps_update(void) {
     if (g.has_fix) {
         snprintf(buf, sizeof(buf), "%.5f, %.5f", g.lat, g.lon);
         lv_label_set_text(g_coord_lbl, buf);
-        snprintf(buf, sizeof(buf), "%.0f mph   %.0f\xC2\xB0",
-                 g.speed_kph * 0.621371f, g.course_deg);
+        snprintf(buf, sizeof(buf), "%.0f mph   %s",
+                 g.speed_kph * 0.621371f, cardinal(g.course_deg));
         lv_label_set_text(g_speed_lbl, buf);
         snprintf(buf, sizeof(buf), "%.0f ft   HDOP %.1f",
                  g.alt_m * 3.28084f, g.hdop);
         lv_label_set_text(g_alt_lbl, buf);
     }
+
+    // Link: actual UART baud the reader locked to + measured fix rate.
+    snprintf(buf, sizeof(buf), "%u baud   %.1f Hz",
+             (unsigned)gps::link_baud(), gps::fix_hz());
+    lv_label_set_text(g_link_lbl, buf);
 
     // Track recording status.
     bool rec = gps::track_active();
