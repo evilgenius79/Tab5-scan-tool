@@ -127,8 +127,8 @@
 //  UART0 is the debug console, so the GPS uses UART1.
 #define GPS_ENABLED              1
 #define GPS_UART_NUM             1         // UART1 (UART0 = console)
-#define GPS_UART_RX_PIN          54        // P4 GPIO <- module TX  (Port A)
-#define GPS_UART_TX_PIN          53        // P4 GPIO -> module RX  (Port A)
+#define GPS_UART_RX_PIN          53        // P4 GPIO <- module TX  (Port A)
+#define GPS_UART_TX_PIN          54        // P4 GPIO -> module RX  (Port A)
 #define GPS_BAUD                 9600      // bare u-blox default; M5 unit = 38400
 
 //  Port A (and the other external connectors) get 5V only when EXT5V_EN is
