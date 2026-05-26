@@ -16,9 +16,10 @@ bool EventBus::init() {
     telem_mtx_ = xSemaphoreCreateMutex();
     dtc_mtx_   = xSemaphoreCreateMutex();
     veh_mtx_   = xSemaphoreCreateMutex();
+    gps_mtx_   = xSemaphoreCreateMutex();
     cmd_queue_ = xQueueCreate(OBD_CMD_QUEUE_DEPTH, sizeof(ObdCommand));
 
-    if (!telem_mtx_ || !dtc_mtx_ || !veh_mtx_ || !cmd_queue_) {
+    if (!telem_mtx_ || !dtc_mtx_ || !veh_mtx_ || !gps_mtx_ || !cmd_queue_) {
         ESP_LOGE(TAG, "primitive allocation failed");
         return false;
     }
@@ -163,6 +164,23 @@ SupportedPids EventBus::getSupportedPids() {
     if (xSemaphoreTake(veh_mtx_, pdMS_TO_TICKS(50)) == pdTRUE) {
         copy = supported_;
         xSemaphoreGive(veh_mtx_);
+    }
+    return copy;
+}
+
+// --- GPS fix ----------------------------------------------------------------
+void EventBus::setGps(const GpsFix& g) {
+    if (xSemaphoreTake(gps_mtx_, pdMS_TO_TICKS(5)) == pdTRUE) {
+        gps_ = g;
+        xSemaphoreGive(gps_mtx_);
+    }
+}
+
+GpsFix EventBus::getGps() {
+    GpsFix copy{};
+    if (xSemaphoreTake(gps_mtx_, pdMS_TO_TICKS(5)) == pdTRUE) {
+        copy = gps_;
+        xSemaphoreGive(gps_mtx_);
     }
     return copy;
 }

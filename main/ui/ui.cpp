@@ -38,6 +38,7 @@ static const char* kTabNames[(int)ScreenId::_Count] = {
     LV_SYMBOL_SD_CARD " LOG",
     LV_SYMBOL_LIST    " CAN",
     LV_SYMBOL_IMAGE   " GRAPH",
+    LV_SYMBOL_GPS     " GPS",
     LV_SYMBOL_SETTINGS" SET",
 };
 
@@ -170,6 +171,9 @@ void ui_init() {
 
     page = lv_tabview_add_tab(g_tabview, kTabNames[(int)ScreenId::Graph]);
     screen_graph_create(page);
+
+    page = lv_tabview_add_tab(g_tabview, kTabNames[(int)ScreenId::Gps]);
+    screen_gps_create(page);
 
     page = lv_tabview_add_tab(g_tabview, kTabNames[(int)ScreenId::Settings]);
     screen_settings_create(page);

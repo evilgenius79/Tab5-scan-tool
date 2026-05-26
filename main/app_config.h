@@ -115,3 +115,21 @@
 #define ALERT_COOLANT_F          240.0f    // coolant over-temp [degF]
 #define ALERT_OIL_F              270.0f    // oil over-temp [degF]
 
+// -----------------------------------------------------------------------------
+//  GPS / GNSS  (u-blox SAM-M10Q on Port A = I2C / DDC)
+// -----------------------------------------------------------------------------
+//  Port A is the Tab5's I2C grove port (GPIO31/32), shared with the touch panel,
+//  PMIC, codec and IO expander. The SAM-M10Q (u-blox M10) exposes its NMEA/UBX
+//  stream over the u-blox DDC (I2C) interface at 7-bit address 0x42. We attach a
+//  device to the BSP's shared I2C bus (bsp_i2c_get_handle), so no extra pins or
+//  UART are needed. The driver drains the DDC byte-count registers (0xFD/0xFE)
+//  and reads the stream from 0xFF on a fixed poll cadence.
+#define GPS_ENABLED              1
+#define GPS_I2C_ADDR             0x42      // u-blox DDC default 7-bit address
+#define GPS_POLL_MS              100       // DDC stream drain cadence
+
+//  Prefer GPS ground speed over OBD VSS for the 0-60 / quarter-mile timers when
+//  a fix is available (more accurate trap speed + distance; needs the 10 Hz
+//  rate the driver requests at startup). Set to 0 to always time off OBD VSS.
+#define PERF_USE_GPS             1
+

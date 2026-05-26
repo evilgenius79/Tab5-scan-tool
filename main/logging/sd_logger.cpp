@@ -116,7 +116,8 @@ bool openFile(bool can_mode) {
         fprintf(g_file,
             "timestamp_us,rpm,speed_kph,map_kpa,boost_psi,afr,eng_load_pct,"
             "maf_gps,coolant_c,iat_c,throttle_pct,ign_adv_deg,battery_v,mpg,"
-            "stft_pct,ltft_pct,fuel_level_pct,oil_c,ambient_c,run_time_s");
+            "stft_pct,ltft_pct,fuel_level_pct,oil_c,ambient_c,run_time_s,"
+            "gps_lat,gps_lon,gps_speed_kph,gps_course,gps_alt_m,gps_sats");
         for (size_t i = 0; i < custpid::count(); ++i) {
             const CustomPid& c = custpid::def(i);
             fprintf(g_file, ",%s[%s]", c.name, c.unit);
@@ -146,6 +147,10 @@ void writeTelemetryRow(const TelemetryState& t) {
         t.ignition_adv_deg, t.battery_v, t.mpg_instant,
         t.short_fuel_trim, t.long_fuel_trim, t.fuel_level_pct,
         t.oil_temp_c, t.ambient_c, (unsigned)t.run_time_s);
+    // GPS columns from the external GNSS module (zeros until a fix is acquired).
+    GpsFix g = EventBus::instance().getGps();
+    fprintf(g_file, ",%.6f,%.6f,%.1f,%.1f,%.1f,%u",
+            g.lat, g.lon, g.speed_kph, g.course_deg, g.alt_m, (unsigned)g.sats);
     // Live custom/profile PID values (knock retard, charge-air temp, boost, ...).
     for (size_t i = 0; i < custpid::count(); ++i) {
         float v;

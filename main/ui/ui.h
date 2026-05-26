@@ -21,6 +21,7 @@ enum class ScreenId : int {
     Logging,       // CSV logging toggle + status
     Sniffer,       // raw CAN frame monitor + filters
     Graph,         // scrolling live trend graph of a selectable parameter
+    Gps,           // GNSS status + GPX track recording
     Settings,      // baud / brightness / bus selection
     _Count
 };

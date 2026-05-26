@@ -57,3 +57,7 @@ void screen_modules_update(void);
 // Screen 11 - Live trend graph (scrolling chart of a selectable parameter).
 void screen_graph_create(lv_obj_t* parent);
 void screen_graph_update(void);
+
+// Screen 12 - GPS / GNSS status + GPX track recording.
+void screen_gps_create(lv_obj_t* parent);
+void screen_gps_update(void);

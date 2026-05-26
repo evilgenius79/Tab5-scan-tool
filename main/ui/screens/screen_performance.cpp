@@ -15,6 +15,7 @@
 namespace {
 
 lv_obj_t* g_speed_val = nullptr;
+lv_obj_t* g_gps_lbl   = nullptr;
 lv_obj_t* g_t060_val  = nullptr;
 lv_obj_t* g_qmile_val = nullptr;
 lv_obj_t* g_trap_val  = nullptr;
@@ -76,6 +77,15 @@ void screen_performance_create(lv_obj_t* parent) {
     lv_obj_set_style_text_font(g_speed_val, &lv_font_montserrat_48, 0);
     lv_label_set_text(g_speed_val, "0 mph");
     lv_obj_center(g_speed_val);
+
+    // GPS status line (speed/heading/altitude from the external GNSS module).
+    lv_obj_t* gpspanel = ui_make_panel(parent, "GPS");
+    lv_obj_set_width(gpspanel, lv_pct(100));
+    lv_obj_set_height(gpspanel, 72);
+    g_gps_lbl = lv_label_create(gpspanel);
+    lv_obj_set_style_text_font(g_gps_lbl, &lv_font_montserrat_20, 0);
+    lv_label_set_text(g_gps_lbl, LV_SYMBOL_GPS " searching...");
+    lv_obj_center(g_gps_lbl);
 
     // Result cards row.
     lv_obj_t* row = lv_obj_create(parent);
@@ -153,6 +163,26 @@ void screen_performance_update(void) {
 
     snprintf(buf, sizeof(buf), "%.0f mph", t.speed_kph * 0.621371f);
     lv_label_set_text(g_speed_val, buf);
+
+    // GPS readout: module presence -> fix acquisition -> live speed/heading/alt.
+    GpsFix g = EventBus::instance().getGps();
+    char gbuf[72];
+    if (!g.valid) {
+        lv_label_set_text(g_gps_lbl, LV_SYMBOL_GPS " no module");
+        lv_obj_set_style_text_color(g_gps_lbl, COL_TEXT_DIM, 0);
+    } else if (!g.has_fix) {
+        snprintf(gbuf, sizeof(gbuf), LV_SYMBOL_GPS " acquiring  (%u sats)",
+                 (unsigned)g.sats);
+        lv_label_set_text(g_gps_lbl, gbuf);
+        lv_obj_set_style_text_color(g_gps_lbl, COL_AMBER, 0);
+    } else {
+        snprintf(gbuf, sizeof(gbuf),
+                 LV_SYMBOL_GPS " %.0f mph   %.0f\xC2\xB0   %.0f ft   %u sats",
+                 g.speed_kph * 0.621371f, g.course_deg, g.alt_m * 3.28084f,
+                 (unsigned)g.sats);
+        lv_label_set_text(g_gps_lbl, gbuf);
+        lv_obj_set_style_text_color(g_gps_lbl, COL_GREEN, 0);
+    }
 
     // Session peaks (USA units).
     snprintf(buf, sizeof(buf), "%.0f", t.peak_rpm);

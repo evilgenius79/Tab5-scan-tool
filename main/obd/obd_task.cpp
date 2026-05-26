@@ -153,7 +153,15 @@ float g_perf_distance_m = 0.0f;
 uint64_t g_perf_last_us = 0;
 
 void updatePerf() {
-    const float mph = g_telem.speed_kph * 0.621371f;
+#if PERF_USE_GPS
+    // GPS ground speed is preferred when a fix is up: more accurate trap speed
+    // and distance than integrating OBD VSS. Falls back to VSS with no fix.
+    GpsFix gps = EventBus::instance().getGps();
+    const float spd_kph = gps.has_fix ? gps.speed_kph : g_telem.speed_kph;
+#else
+    const float spd_kph = g_telem.speed_kph;
+#endif
+    const float mph = spd_kph * 0.621371f;
     const uint64_t now = esp_timer_get_time();
 
     if (g_perf.armed && !g_perf.running) {
@@ -172,7 +180,7 @@ void updatePerf() {
 
     // Integrate distance (trapezoidal) for the 1/4 mile (402.336 m).
     float dt = (now - g_perf_last_us) / 1e6f;
-    g_perf_distance_m += (g_telem.speed_kph / 3.6f) * dt;
+    g_perf_distance_m += (spd_kph / 3.6f) * dt;
     g_perf_last_us = now;
 
     if (!g_perf.hit_60 && mph >= 60.0f) {

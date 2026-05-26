@@ -142,6 +142,26 @@ struct SupportedPids {
 };
 
 // -----------------------------------------------------------------------------
+//  GPS / GNSS fix (u-blox SAM-M10Q over UART, parsed from NMEA RMC + GGA).
+//  `valid` means the module is talking; `has_fix` means lat/lon are a real
+//  position. Coordinates are decimal degrees; speed is km/h; altitude is meters.
+// -----------------------------------------------------------------------------
+struct GpsFix {
+    bool    valid = false;       // module producing parseable sentences
+    bool    has_fix = false;     // positional fix (lat/lon valid)
+    double  lat = 0.0;
+    double  lon = 0.0;
+    float   speed_kph = 0.0f;
+    float   course_deg = 0.0f;   // true heading
+    float   alt_m = 0.0f;        // altitude above MSL
+    float   hdop = 0.0f;         // horizontal dilution of precision
+    uint8_t sats = 0;            // satellites in use
+    uint8_t utc_h = 0, utc_m = 0, utc_s = 0;
+    uint16_t utc_year = 0;       // 4-digit (0 if date not yet decoded)
+    uint8_t utc_mon = 0, utc_day = 0;
+};
+
+// -----------------------------------------------------------------------------
 //  The bus.
 // -----------------------------------------------------------------------------
 class EventBus {
@@ -204,6 +224,11 @@ public:
     void          setSupportedPids(const SupportedPids& sp);
     SupportedPids getSupportedPids();
 
+    // --- GPS fix (guarded by gps_mtx_) --------------------------------------
+    void   setGps(const GpsFix& g);
+    GpsFix getGps();
+    std::atomic<bool> gps_present{false};   // true once the module sends data
+
 private:
     EventBus() = default;
 
@@ -226,4 +251,7 @@ private:
     ModuleResult        modules_[MAX_MODULES]{};
     size_t              module_count_ = 0;
     SupportedPids       supported_{};
+
+    SemaphoreHandle_t   gps_mtx_    = nullptr;
+    GpsFix              gps_{};
 };

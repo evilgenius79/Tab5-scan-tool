@@ -17,6 +17,7 @@
 #include "obd/obd_task.h"
 #include "logging/sd_logger.h"
 #include "audio/alerts.h"
+#include "gps/gps.h"
 
 #include "nvs_flash.h"
 #include "esp_log.h"
@@ -49,6 +50,7 @@ extern "C" void app_main(void) {
     // --- 3. I/O + logging tasks --------------------------------------------
     obd_task_start();
     sd_logger_start();
+    gps::start();               // GNSS reader on the external UART (if enabled)
 
     ESP_LOGI(TAG, "boot complete; free PSRAM=%u internal=%u",
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),

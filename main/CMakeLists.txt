@@ -21,6 +21,9 @@ idf_component_register(
         "obd/dtc_lookup.cpp"
         "obd/vin_decode.cpp"
 
+        # --- gps / gnss -----------------------------------------------------
+        "gps/gps.cpp"
+
         # --- sd card logging ------------------------------------------------
         "logging/sd_logger.cpp"
 
@@ -42,6 +45,7 @@ idf_component_register(
         "ui/screens/screen_logging.cpp"
         "ui/screens/screen_sniffer.cpp"
         "ui/screens/screen_graph.cpp"
+        "ui/screens/screen_gps.cpp"
         "ui/screens/screen_settings.cpp"
 
     INCLUDE_DIRS
