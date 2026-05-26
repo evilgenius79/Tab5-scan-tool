@@ -164,8 +164,11 @@ void trackAppend(const GpsFix& f) {
     if ((n & 0x0F) == 0) fflush(g_track_fp);   // commit every 16 points
 }
 
+unsigned g_nmea_ok = 0;   // count of checksum-valid NMEA sentences (diagnostic)
+
 void parseLine(char* line) {
     if (!checksumOk(line)) return;
+    ++g_nmea_ok;
 
     char* fields[24];
     int n = splitFields(line + 1, fields, 24);   // skip '$'
@@ -221,6 +224,13 @@ void gpsTask(void*) {
     size_t  line_len = 0;
     uint8_t buf[256];
 
+    // RX diagnostic: every 5 s report bytes received vs valid sentences parsed,
+    // so a wiring fault (0 bytes) is distinguishable from a baud mismatch
+    // (bytes arrive but none checksum-valid). Drops out once GPS is healthy.
+    uint64_t next_diag = esp_timer_get_time() + 5000000ULL;
+    uint32_t rx_window = 0;
+    char     sample[48] = {0};
+
     while (true) {
         // Reconcile track-record requests (open/close happen on this task only).
         if (g_track_want.load() && !g_track_on.load())      trackOpen();
@@ -228,7 +238,32 @@ void gpsTask(void*) {
 
         // Blocks up to 200 ms; returns sooner once a chunk has arrived.
         int n = uart_read_bytes(kUart, buf, sizeof(buf), pdMS_TO_TICKS(200));
-        if (n > 0) feed(buf, n, line, line_len, sizeof(line));
+        if (n > 0) {
+            rx_window += (uint32_t)n;
+            if (sample[0] == 0) {            // capture one printable sample/window
+                size_t k = 0;
+                for (int i = 0; i < n && k < sizeof(sample) - 1; ++i)
+                    sample[k++] = (buf[i] >= 32 && buf[i] < 127) ? (char)buf[i] : '.';
+                sample[k] = 0;
+            }
+            feed(buf, n, line, line_len, sizeof(line));
+        }
+
+        uint64_t now = esp_timer_get_time();
+        if (g_nmea_ok < 4 && now >= next_diag) {    // quiet once clearly working
+            next_diag = now + 5000000ULL;
+            if (g_nmea_ok > 0)
+                ESP_LOGI(TAG, "rx OK: %u valid NMEA sentences so far", g_nmea_ok);
+            else if (rx_window > 0)
+                ESP_LOGW(TAG, "rx %u bytes/5s but 0 valid NMEA - baud mismatch? "
+                              "sample: \"%s\"", (unsigned)rx_window, sample);
+            else
+                ESP_LOGW(TAG, "rx 0 bytes on GPIO%d - no data; check wiring or "
+                              "swap RX<->TX (set GPS_UART_RX_PIN=%d)",
+                         GPS_UART_RX_PIN, GPS_UART_TX_PIN);
+            rx_window = 0;
+            sample[0] = 0;
+        }
     }
 }
 
