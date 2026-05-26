@@ -120,16 +120,23 @@
 // -----------------------------------------------------------------------------
 //  Port A on the Tab5 breaks out GPIO53/54. The SAM-M10Q is a UART NMEA-0183
 //  device: its TX (NMEA out) is wired to GPS_UART_RX_PIN, and the P4's
-//  GPS_UART_TX_PIN -> module RX is only needed to push config (optional). The
-//  ESP32-P4 GPIO matrix lets UART1 route to any pins. A bare u-blox module
-//  defaults to 9600 baud / 1 Hz; at that rate GPS-based 0-60 timing resolves to
-//  ~1 s steps (raise the module's rate + baud for finer launch timing).
-//  UART0 is the debug console, so the GPS uses UART1.
+//  GPS_UART_TX_PIN -> module RX carries our config. The ESP32-P4 GPIO matrix
+//  lets UART1 route to any pins. UART0 is the debug console, so GPS uses UART1.
+//
+//  GPS_AUTOCONFIG: on boot the driver sends UBX-CFG-VALSET to set the update
+//  rate (GPS_NAV_RATE_HZ) and switch the module to GPS_BAUD. It sends the config
+//  first at GPS_FACTORY_BAUD (to convert a fresh 9600 module) then again at the
+//  target baud, and the reader auto-detects the baud (cycling GPS_BAUD <->
+//  factory) if no valid NMEA arrives - so it self-heals from any module state
+//  and never bricks the link. A bare u-blox module ships at 9600 baud / 1 Hz.
 #define GPS_ENABLED              1
 #define GPS_UART_NUM             1         // UART1 (UART0 = console)
 #define GPS_UART_RX_PIN          53        // P4 GPIO <- module TX  (Port A)
 #define GPS_UART_TX_PIN          54        // P4 GPIO -> module RX  (Port A)
-#define GPS_BAUD                 9600      // bare u-blox default; M5 unit = 38400
+#define GPS_BAUD                 115200    // operating baud (autoconfig target)
+#define GPS_AUTOCONFIG           1         // push rate+baud to the module on boot
+#define GPS_NAV_RATE_HZ          10        // fixes/sec (10 Hz -> ~100 ms timing)
+#define GPS_FACTORY_BAUD         9600      // module's default; used to bootstrap
 
 //  Port A (and the other external connectors) get 5V only when EXT5V_EN is
 //  asserted: PI4IOE5V6408 #1 (I2C 0x43, the BSP's first IO expander), pin 2,

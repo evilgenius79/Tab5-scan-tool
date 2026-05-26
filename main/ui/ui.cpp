@@ -23,6 +23,7 @@ static int       g_active  = 0;
 static lv_obj_t* g_topbar  = nullptr;
 static lv_obj_t* g_bat_lbl = nullptr;
 static lv_obj_t* g_mil_lbl = nullptr;
+static lv_obj_t* g_gps_lbl = nullptr;
 static constexpr int TOPBAR_H = 44;
 
 // Tab labels with glyphs (Montserrat symbol font) for a polished nav rail.
@@ -116,7 +117,22 @@ void ui_init() {
     lv_obj_set_style_text_color(g_mil_lbl, COL_TEXT_DIM, 0);
     lv_label_set_text(g_mil_lbl, LV_SYMBOL_WARNING " status --");
 
-    g_bat_lbl = lv_label_create(g_topbar);
+    // Right-side group so the GPS-lock icon sits directly beside the battery.
+    lv_obj_t* right = lv_obj_create(g_topbar);
+    lv_obj_remove_style_all(right);
+    lv_obj_set_size(right, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_clear_flag(right, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_flex_flow(right, LV_FLEX_FLOW_ROW);
+    lv_obj_set_flex_align(right, LV_FLEX_ALIGN_END, LV_FLEX_ALIGN_CENTER,
+                          LV_FLEX_ALIGN_CENTER);
+    lv_obj_set_style_pad_column(right, 16, 0);
+
+    g_gps_lbl = lv_label_create(right);
+    lv_obj_set_style_text_font(g_gps_lbl, &lv_font_montserrat_20, 0);
+    lv_obj_set_style_text_color(g_gps_lbl, COL_TEXT_DIM, 0);
+    lv_label_set_text(g_gps_lbl, LV_SYMBOL_GPS);
+
+    g_bat_lbl = lv_label_create(right);
     lv_obj_set_style_text_font(g_bat_lbl, &lv_font_montserrat_20, 0);
     lv_label_set_text(g_bat_lbl, LV_SYMBOL_BATTERY_FULL);
 
@@ -203,6 +219,23 @@ void ui_topbar_update(void) {
     lv_label_set_text(g_bat_lbl, buf);
     lv_obj_set_style_text_color(g_bat_lbl,
         charging ? COL_GREEN : (pct >= 0 && pct < 15 ? COL_RED : COL_TEXT), 0);
+
+    // --- GPS lock (beside battery): green = 3D fix, amber = acquiring -------
+    if (g_gps_lbl) {
+        GpsFix g = EventBus::instance().getGps();
+        char gbuf[24];
+        if (g.has_fix) {
+            snprintf(gbuf, sizeof(gbuf), LV_SYMBOL_GPS " %u", (unsigned)g.sats);
+            lv_label_set_text(g_gps_lbl, gbuf);
+            lv_obj_set_style_text_color(g_gps_lbl, COL_GREEN, 0);
+        } else if (g.valid) {
+            lv_label_set_text(g_gps_lbl, LV_SYMBOL_GPS);
+            lv_obj_set_style_text_color(g_gps_lbl, COL_AMBER, 0);
+        } else {
+            lv_label_set_text(g_gps_lbl, LV_SYMBOL_GPS);
+            lv_obj_set_style_text_color(g_gps_lbl, COL_TEXT_DIM, 0);
+        }
+    }
 
     // --- MIL / Check-Engine (left) from the auto-read I/M readiness ---------
     if (g_mil_lbl) {

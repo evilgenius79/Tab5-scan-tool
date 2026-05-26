@@ -219,10 +219,61 @@ void feed(const uint8_t* buf, int len, char* line, size_t& line_len, size_t cap)
     }
 }
 
+#if GPS_AUTOCONFIG
+// Frame + write a UBX message over the UART (8-bit Fletcher checksum).
+void sendUbx(uint8_t cls, uint8_t id, const uint8_t* payload, uint16_t len) {
+    uint8_t hdr[6] = {0xB5, 0x62, cls, id, (uint8_t)(len & 0xFF), (uint8_t)(len >> 8)};
+    uint8_t cka = 0, ckb = 0;
+    for (int i = 2; i < 6; ++i)  { cka += hdr[i];     ckb += cka; }
+    for (int i = 0; i < len; ++i){ cka += payload[i]; ckb += cka; }
+    uint8_t tail[2] = {cka, ckb};
+    uart_write_bytes(kUart, (const char*)hdr, 6);
+    uart_write_bytes(kUart, (const char*)payload, len);
+    uart_write_bytes(kUart, (const char*)tail, 2);
+    uart_wait_tx_done(kUart, pdMS_TO_TICKS(100));
+}
+
+// Push measurement rate + UART1 baud to the M10 via UBX-CFG-VALSET (RAM layer).
+// Sent at the factory baud first (converts a 9600 module), then at the target
+// baud (no-op if already there), so it works from any starting state.
+void gpsConfigure() {
+    const uint16_t meas = 1000 / GPS_NAV_RATE_HZ;     // ms between measurements
+    const uint32_t baud = GPS_BAUD;
+    uint8_t p[32];
+    int n = 0;
+    p[n++] = 0x00;                                     // version
+    p[n++] = 0x01;                                     // layer = RAM
+    p[n++] = 0x00; p[n++] = 0x00;                      // reserved
+    p[n++] = 0x01; p[n++] = 0x00; p[n++] = 0x21; p[n++] = 0x30;   // CFG-RATE-MEAS U2
+    p[n++] = (uint8_t)(meas & 0xFF); p[n++] = (uint8_t)(meas >> 8);
+    p[n++] = 0x02; p[n++] = 0x00; p[n++] = 0x21; p[n++] = 0x30;   // CFG-RATE-NAV U2
+    p[n++] = 0x01; p[n++] = 0x00;                                  // = 1 cycle
+    p[n++] = 0x01; p[n++] = 0x00; p[n++] = 0x52; p[n++] = 0x40;   // CFG-UART1-BAUDRATE U4
+    p[n++] = (uint8_t)(baud);       p[n++] = (uint8_t)(baud >> 8);
+    p[n++] = (uint8_t)(baud >> 16); p[n++] = (uint8_t)(baud >> 24);
+
+    uart_set_baudrate(kUart, GPS_FACTORY_BAUD);
+    sendUbx(0x06, 0x8A, p, n);
+    vTaskDelay(pdMS_TO_TICKS(150));
+    uart_set_baudrate(kUart, GPS_BAUD);
+    sendUbx(0x06, 0x8A, p, n);
+    vTaskDelay(pdMS_TO_TICKS(50));
+    uart_flush_input(kUart);
+    ESP_LOGI(TAG, "sent UBX config: %d Hz, %d baud", GPS_NAV_RATE_HZ, GPS_BAUD);
+}
+#endif
+
 void gpsTask(void*) {
     char    line[128];
     size_t  line_len = 0;
     uint8_t buf[256];
+
+#if GPS_AUTOCONFIG
+    gpsConfigure();
+#endif
+    // Auto-baud: if no valid NMEA arrives, cycle target <-> factory baud.
+    const uint32_t kBauds[] = { GPS_BAUD, GPS_FACTORY_BAUD };
+    size_t baud_idx = 0;
 
     // RX diagnostic: every 5 s report bytes received vs valid sentences parsed,
     // so a wiring fault (0 bytes) is distinguishable from a baud mismatch
@@ -252,15 +303,20 @@ void gpsTask(void*) {
         uint64_t now = esp_timer_get_time();
         if (g_nmea_ok < 4 && now >= next_diag) {    // quiet once clearly working
             next_diag = now + 5000000ULL;
-            if (g_nmea_ok > 0)
+            if (g_nmea_ok > 0) {
                 ESP_LOGI(TAG, "rx OK: %u valid NMEA sentences so far", g_nmea_ok);
-            else if (rx_window > 0)
-                ESP_LOGW(TAG, "rx %u bytes/5s but 0 valid NMEA - baud mismatch? "
-                              "sample: \"%s\"", (unsigned)rx_window, sample);
-            else
+            } else if (rx_window > 0) {
+                // Bytes arrive but none parse -> wrong baud; try the next one.
+                baud_idx = (baud_idx + 1) % (sizeof(kBauds) / sizeof(kBauds[0]));
+                uart_set_baudrate(kUart, kBauds[baud_idx]);
+                ESP_LOGW(TAG, "rx %u bytes/5s but 0 valid NMEA (sample: \"%s\") - "
+                              "retrying at %u baud", (unsigned)rx_window, sample,
+                         (unsigned)kBauds[baud_idx]);
+            } else {
                 ESP_LOGW(TAG, "rx 0 bytes on GPIO%d - no data; check wiring or "
                               "swap RX<->TX (set GPS_UART_RX_PIN=%d)",
                          GPS_UART_RX_PIN, GPS_UART_TX_PIN);
+            }
             rx_window = 0;
             sample[0] = 0;
         }
