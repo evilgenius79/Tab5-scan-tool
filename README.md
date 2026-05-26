@@ -15,6 +15,7 @@ standard SAE PIDs are universal; enhanced/module access uses a Ford profile.
   - [Live Dash — gauge channels & layouts](#live-dash)
   - [Settings — every adjustable option](#settings)
 - [Audible alerts](#audible-alerts)
+- [GPS / GNSS (SAM-M10Q)](#gps--gnss)
 - [SD card layout](#sd-card-layout)
 - [Custom / manufacturer PIDs](#custom--manufacturer-pids)
 - [DTC description database](#dtc-description-database)
@@ -39,7 +40,10 @@ standard SAE PIDs are universal; enhanced/module access uses a Ford profile.
 - **Strict task separation**: LVGL on core 1, USB/OBD I/O on core 0, with a
   PSRAM-backed lock-free frame ring so high-rate CAN traffic never blocks the UI.
 - **Auto-reconnecting USB host** (FTDI / CP210x / CH34x via `usb_host_vcp`).
-- **Twelve LVGL screens** (see below).
+- **GPS / GNSS** (optional u-blox SAM-M10Q on Port A / I2C): live position,
+  speed, heading, altitude and satellite count; GPS-clocked 0-60 / ¼-mile;
+  GPX track recording to SD; GPS columns added to the telemetry log.
+- **Thirteen LVGL screens** (see below).
 - **Configurable dash**: 20 selectable gauge channels, switchable 6/4/2-gauge
   layouts, per-gauge trend sparkline, and a global top status bar (battery + MIL)
   on every screen. Assignments + layout persist in NVS. USA units (mph, °F, psi).
@@ -76,7 +80,8 @@ The UI is a left-rail tabview. Twelve screens, in nav order:
 | 9 | LOG   | Data Logging | Logging on/off + status; writes telemetry/CAN CSV to SD |
 | 10 | CAN   | Sniffer | Raw CAN frame stream with hex pass-filter keypad |
 | 11 | GRAPH | Trend Graph | Full-screen live line chart; pick any of 10 channels from a dropdown |
-| 12 | SET   | Settings | Adapter/UI configuration (see below) |
+| 12 | GPS   | GPS / Track | Live fix (position, speed, heading, altitude, sats, HDOP) + GPX track RECORD toggle |
+| 13 | SET   | Settings | Adapter/UI configuration (see below) |
 
 A persistent **top status bar** (44 px) sits above all screens: battery % +
 charge state on the right, MIL / stored-code summary on the left.
@@ -156,6 +161,36 @@ Global knobs (in `app_config.h`): `ALERT_VOLUME_PCT` = 70, `ALERT_COOLDOWN_MS`
 
 ---
 
+## GPS / GNSS
+
+An optional **u-blox SAM-M10Q** GNSS module plugged into **Port A** (the Tab5's
+I2C grove port) is read over the u-blox **DDC (I2C)** interface at address
+`0x42` — it shares the bus with the touch panel/PMIC/codec, so no extra pins or
+UART are used. The driver drains the DDC stream, validates the NMEA checksum,
+and parses `RMC` (position, ground speed, heading, date/time, fix validity) and
+`GGA` (altitude, satellites, HDOP, fix quality). At startup it requests a 10 Hz
+update rate via `UBX-CFG-VALSET` (best-effort; ignored modules stay at default).
+
+What it enables:
+
+- **GPS-clocked performance runs** — the 0-60 mph and ¼-mile timers prefer GPS
+  ground speed whenever a fix is present (more accurate trap speed + distance
+  than integrating OBD VSS). Set `PERF_USE_GPS` to 0 to always use OBD VSS.
+- **Live GPS readout** on the Performance screen and the dedicated GPS screen
+  (position, speed, heading, altitude, satellites, HDOP, fix state).
+- **GPX track recording** — the GPS screen's RECORD button writes
+  `/sdcard/track-*.gpx` (standard GPX 1.1 trackpoints with timestamps), openable
+  in Google Earth, Strava, etc. Recording is handled on the I/O core.
+- **GPS columns in the telemetry CSV** (`gps_lat`, `gps_lon`, `gps_speed_kph`,
+  `gps_course`, `gps_alt_m`, `gps_sats`).
+
+Configuration (`app_config.h`): `GPS_ENABLED`, `GPS_I2C_ADDR` (0x42),
+`GPS_POLL_MS` (100), `PERF_USE_GPS`. If the module isn't wired up, leave
+`GPS_ENABLED` at 1 — the screen just shows "no module" and nothing else is
+affected (boot logs an `0x42` no-ACK warning).
+
+---
+
 ## SD card layout
 
 All SD files are optional; the tool runs without a card (logging auto-disables).
@@ -172,6 +207,7 @@ All SD files are optional; the tool runs without a card (logging auto-disables).
 │   └── mil.wav
 ├── telemetry-*.csv      # decoded telemetry log (polling mode) — written by the tool
 ├── canlog-*.csv         # raw CAN frame log (sniffer mode) — written by the tool
+├── track-*.gpx          # GPX track log (GPS RECORD) — written by the tool
 └── diag.log             # persistent console mirror across boots
 ```
 
@@ -249,6 +285,8 @@ All app-level tunables live in `main/app_config.h`:
 | UI | `UI_SNIFFER_DRAIN_MS` / `UI_SNIFFER_MAX_ROWS` | 50 / 200 | sniffer cadence / scrollback |
 | Alerts | `ALERT_VOLUME_PCT` / `ALERT_COOLDOWN_MS` | 70 / 8000 | speaker volume / repeat lockout |
 | Alerts | `ALERT_KNOCK_DEG` / `ALERT_BOOST_PSI` / `ALERT_COOLANT_F` / `ALERT_OIL_F` | 3.0 / 25 / 240 / 270 | alert thresholds |
+| GPS | `GPS_ENABLED` / `GPS_I2C_ADDR` / `GPS_POLL_MS` | 1 / 0x42 / 100 | GNSS on Port A (I2C/DDC) |
+| GPS | `PERF_USE_GPS` | 1 | prefer GPS speed for perf timers when a fix is up |
 
 ---
 
@@ -261,6 +299,8 @@ All app-level tunables live in `main/app_config.h`:
                                                └─► logger FrameRing ─► SD logger task
         UI commands (mode, filter, DTC, baud) ◄── EventBus command queue ◄── screens
                        audible alerts task ◄── TelemetryState (knock/boost/temp/MIL)
+  GPS (I2C/DDC) ─► GPS task ─► GpsFix (EventBus) ─► perf timers / GPS screen / CSV
+                            └─► GPX track file (SD)
 ```
 
 | Layer        | Files                                                       |
@@ -269,9 +309,10 @@ All app-level tunables live in `main/app_config.h`:
 | Core         | `main/core/` (ring buffer, event bus, shared state, power)  |
 | USB transport| `main/usb/` (`usb_host_cdc`, `obd_link`)                    |
 | OBD protocol | `main/obd/` (STN commands, parser, PID defs, DTC/VIN, task) |
+| GPS          | `main/gps/gps.*` (I2C/DDC NMEA reader + GPX track logger)   |
 | Audio        | `main/audio/alerts.*`                                       |
 | Logging      | `main/logging/sd_logger.*`                                  |
-| UI           | `main/ui/` (theme, tab shell, 12 screens)                   |
+| UI           | `main/ui/` (theme, tab shell, 13 screens)                   |
 
 ---
 
