@@ -40,7 +40,7 @@ standard SAE PIDs are universal; enhanced/module access uses a Ford profile.
 - **Strict task separation**: LVGL on core 1, USB/OBD I/O on core 0, with a
   PSRAM-backed lock-free frame ring so high-rate CAN traffic never blocks the UI.
 - **Auto-reconnecting USB host** (FTDI / CP210x / CH34x via `usb_host_vcp`).
-- **GPS / GNSS** (optional u-blox SAM-M10Q on Port A / I2C): live position,
+- **GPS / GNSS** (optional u-blox SAM-M10Q on Port A / UART): live position,
   speed, heading, altitude and satellite count; GPS-clocked 0-60 / ¼-mile;
   GPX track recording to SD; GPS columns added to the telemetry log.
 - **Thirteen LVGL screens** (see below).
@@ -163,13 +163,14 @@ Global knobs (in `app_config.h`): `ALERT_VOLUME_PCT` = 70, `ALERT_COOLDOWN_MS`
 
 ## GPS / GNSS
 
-An optional **u-blox SAM-M10Q** GNSS module plugged into **Port A** (the Tab5's
-I2C grove port) is read over the u-blox **DDC (I2C)** interface at address
-`0x42` — it shares the bus with the touch panel/PMIC/codec, so no extra pins or
-UART are used. The driver drains the DDC stream, validates the NMEA checksum,
-and parses `RMC` (position, ground speed, heading, date/time, fix validity) and
-`GGA` (altitude, satellites, HDOP, fix quality). At startup it requests a 10 Hz
-update rate via `UBX-CFG-VALSET` (best-effort; ignored modules stay at default).
+An optional **u-blox SAM-M10Q** GNSS module wired to **Port A** (GPIO53/54) is
+read as a **UART** NMEA-0183 device on UART1: the module's TX (NMEA out) goes to
+`GPS_UART_RX_PIN` (default G53), and `GPS_UART_TX_PIN` (G54) -> module RX is only
+needed to push config. The reader validates the NMEA checksum and parses `RMC`
+(position, ground speed, heading, date/time, fix validity) and `GGA` (altitude,
+satellites, HDOP, fix quality). A bare u-blox module defaults to 9600 baud /
+1 Hz; at that rate GPS-clocked 0-60 timing resolves to ~1 s steps (raise the
+module's update rate and baud for finer launch timing).
 
 What it enables:
 
@@ -184,10 +185,11 @@ What it enables:
 - **GPS columns in the telemetry CSV** (`gps_lat`, `gps_lon`, `gps_speed_kph`,
   `gps_course`, `gps_alt_m`, `gps_sats`).
 
-Configuration (`app_config.h`): `GPS_ENABLED`, `GPS_I2C_ADDR` (0x42),
-`GPS_POLL_MS` (100), `PERF_USE_GPS`. If the module isn't wired up, leave
-`GPS_ENABLED` at 1 — the screen just shows "no module" and nothing else is
-affected (boot logs an `0x42` no-ACK warning).
+Configuration (`app_config.h`): `GPS_ENABLED`, `GPS_UART_NUM` (1),
+`GPS_UART_RX_PIN` (53), `GPS_UART_TX_PIN` (54), `GPS_BAUD` (9600),
+`PERF_USE_GPS`. If the module isn't wired up, leave `GPS_ENABLED` at 1 — the
+GPS screen just shows "acquiring"/"no module" and nothing else is affected. If
+no fix ever appears, the RX/TX pins are likely swapped.
 
 ---
 
@@ -285,7 +287,8 @@ All app-level tunables live in `main/app_config.h`:
 | UI | `UI_SNIFFER_DRAIN_MS` / `UI_SNIFFER_MAX_ROWS` | 50 / 200 | sniffer cadence / scrollback |
 | Alerts | `ALERT_VOLUME_PCT` / `ALERT_COOLDOWN_MS` | 70 / 8000 | speaker volume / repeat lockout |
 | Alerts | `ALERT_KNOCK_DEG` / `ALERT_BOOST_PSI` / `ALERT_COOLANT_F` / `ALERT_OIL_F` | 3.0 / 25 / 240 / 270 | alert thresholds |
-| GPS | `GPS_ENABLED` / `GPS_I2C_ADDR` / `GPS_POLL_MS` | 1 / 0x42 / 100 | GNSS on Port A (I2C/DDC) |
+| GPS | `GPS_ENABLED` / `GPS_UART_NUM` | 1 / 1 | GNSS on Port A (UART NMEA) |
+| GPS | `GPS_UART_RX_PIN` / `GPS_UART_TX_PIN` / `GPS_BAUD` | 53 / 54 / 9600 | Port A pins + baud |
 | GPS | `PERF_USE_GPS` | 1 | prefer GPS speed for perf timers when a fix is up |
 
 ---
@@ -299,8 +302,8 @@ All app-level tunables live in `main/app_config.h`:
                                                └─► logger FrameRing ─► SD logger task
         UI commands (mode, filter, DTC, baud) ◄── EventBus command queue ◄── screens
                        audible alerts task ◄── TelemetryState (knock/boost/temp/MIL)
-  GPS (I2C/DDC) ─► GPS task ─► GpsFix (EventBus) ─► perf timers / GPS screen / CSV
-                            └─► GPX track file (SD)
+  GPS (UART G53/54) ─► GPS task ─► GpsFix (EventBus) ─► perf timers / GPS screen / CSV
+                                └─► GPX track file (SD)
 ```
 
 | Layer        | Files                                                       |
@@ -309,7 +312,7 @@ All app-level tunables live in `main/app_config.h`:
 | Core         | `main/core/` (ring buffer, event bus, shared state, power)  |
 | USB transport| `main/usb/` (`usb_host_cdc`, `obd_link`)                    |
 | OBD protocol | `main/obd/` (STN commands, parser, PID defs, DTC/VIN, task) |
-| GPS          | `main/gps/gps.*` (I2C/DDC NMEA reader + GPX track logger)   |
+| GPS          | `main/gps/gps.*` (UART NMEA reader + GPX track logger)      |
 | Audio        | `main/audio/alerts.*`                                       |
 | Logging      | `main/logging/sd_logger.*`                                  |
 | UI           | `main/ui/` (theme, tab shell, 13 screens)                   |

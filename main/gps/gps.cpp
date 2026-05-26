@@ -1,15 +1,12 @@
 // =============================================================================
-//  gps.cpp - u-blox SAM-M10Q GNSS reader (I2C / DDC, NMEA-0183).
+//  gps.cpp - u-blox SAM-M10Q GNSS reader (UART, NMEA-0183).
 // -----------------------------------------------------------------------------
-//  The module sits on Port A = the Tab5 shared I2C bus. u-blox exposes its
-//  message stream over the DDC interface at address 0x42:
-//    * register 0xFD/0xFE: 16-bit count of bytes pending in the stream
-//    * register 0xFF     : the stream itself (NMEA + UBX); 0xFF == idle filler
-//  We drain that stream on a fixed cadence, validate the NMEA checksum, and
-//  parse RMC (position/speed/course/date/time/validity) + GGA (altitude, sats,
-//  HDOP, fix quality), publishing the accumulated GpsFix into the EventBus.
+//  The module is wired to Port A (GPIO53/54) as a UART NMEA device. We read the
+//  byte stream, validate the NMEA checksum, and parse RMC (position / speed /
+//  course / date / time / validity) + GGA (altitude, sats, HDOP, fix quality),
+//  publishing the accumulated GpsFix into the EventBus.
 //
-//  The same task owns an optional GPX track log so all file + I2C access stays
+//  The same task owns an optional GPX track log so all file + UART access stays
 //  single-threaded on the I/O core (the UI only flips an atomic request flag).
 //
 //  NMEA fields can be empty (",,"), so we split manually rather than with
@@ -23,8 +20,7 @@
 #include "core/event_bus.h"
 #include "logging/sd_logger.h"   // sd_card_ensure_mounted()
 
-#include "bsp/esp-bsp.h"
-#include "driver/i2c_master.h"
+#include "driver/uart.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -40,7 +36,8 @@ static const char* TAG = "GPS";
 
 namespace {
 
-i2c_master_dev_handle_t g_dev = nullptr;
+constexpr uart_port_t kUart = (uart_port_t)GPS_UART_NUM;
+
 GpsFix g_fix{};   // accumulated across RMC/GGA; republished after each sentence
 
 // --- GPX track recording state (touched only by the GPS task, except the
@@ -203,20 +200,11 @@ void parseLine(char* line) {
     }
 }
 
-// --- I2C / DDC transport ----------------------------------------------------
-
-bool readAvail(uint16_t* avail) {
-    uint8_t reg = 0xFD, cnt[2] = {0, 0};
-    if (i2c_master_transmit_receive(g_dev, &reg, 1, cnt, 2, 100) != ESP_OK)
-        return false;
-    *avail = (uint16_t)((cnt[0] << 8) | cnt[1]);
-    return true;
-}
+// --- UART transport ---------------------------------------------------------
 
 void feed(const uint8_t* buf, int len, char* line, size_t& line_len, size_t cap) {
     for (int i = 0; i < len; ++i) {
         char c = (char)buf[i];
-        if (c == (char)0xFF) continue;        // DDC idle filler
         if (c == '\n' || c == '\r') {
             if (line_len > 0) { line[line_len] = '\0'; parseLine(line); line_len = 0; }
         } else if (line_len < cap - 1) {
@@ -227,57 +215,19 @@ void feed(const uint8_t* buf, int len, char* line, size_t& line_len, size_t cap)
     }
 }
 
-// Build + write a UBX frame to the module (computes the Fletcher checksum).
-void sendUbx(uint8_t cls, uint8_t id, const uint8_t* payload, uint16_t len) {
-    uint8_t buf[64];
-    if (len + 8 > (int)sizeof(buf)) return;
-    int p = 0;
-    buf[p++] = 0xB5; buf[p++] = 0x62; buf[p++] = cls; buf[p++] = id;
-    buf[p++] = (uint8_t)(len & 0xFF); buf[p++] = (uint8_t)(len >> 8);
-    for (int i = 0; i < len; ++i) buf[p++] = payload[i];
-    uint8_t cka = 0, ckb = 0;
-    for (int i = 2; i < p; ++i) { cka += buf[i]; ckb += cka; }
-    buf[p++] = cka; buf[p++] = ckb;
-    i2c_master_transmit(g_dev, buf, p, 100);
-}
-
-// Best-effort: set the M10 measurement rate to 100 ms (10 Hz) via UBX-CFG-VALSET
-// in RAM (key CFG-RATE-MEAS = 0x30210001, U2). If the module ignores it, it
-// stays at its default rate - GPS timing just runs slower.
-void configure10Hz() {
-    const uint8_t payload[] = {
-        0x00, 0x01, 0x00, 0x00,             // version, layer=RAM, reserved
-        0x01, 0x00, 0x21, 0x30,             // key 0x30210001 (little-endian)
-        0x64, 0x00                          // value = 100 ms
-    };
-    sendUbx(0x06, 0x8A, payload, sizeof(payload));
-}
-
 void gpsTask(void*) {
     char    line[128];
     size_t  line_len = 0;
-    uint8_t reg_ff = 0xFF;
-    uint8_t chunk[96];
-
-    configure10Hz();
+    uint8_t buf[256];
 
     while (true) {
         // Reconcile track-record requests (open/close happen on this task only).
         if (g_track_want.load() && !g_track_on.load())      trackOpen();
         else if (!g_track_want.load() && g_track_on.load()) trackClose();
 
-        uint16_t avail = 0;
-        if (readAvail(&avail) && avail != 0 && avail != 0xFFFF) {
-            while (avail > 0) {
-                int want = avail < sizeof(chunk) ? (int)avail : (int)sizeof(chunk);
-                if (i2c_master_transmit_receive(g_dev, &reg_ff, 1, chunk, want, 100)
-                        != ESP_OK)
-                    break;
-                feed(chunk, want, line, line_len, sizeof(line));
-                avail -= (uint16_t)want;
-            }
-        }
-        vTaskDelay(pdMS_TO_TICKS(GPS_POLL_MS));
+        // Blocks up to 200 ms; returns sooner once a chunk has arrived.
+        int n = uart_read_bytes(kUart, buf, sizeof(buf), pdMS_TO_TICKS(200));
+        if (n > 0) feed(buf, n, line, line_len, sizeof(line));
     }
 }
 
@@ -286,30 +236,28 @@ void gpsTask(void*) {
 namespace gps {
 
 void start() {
-    i2c_master_bus_handle_t bus = bsp_i2c_get_handle();
-    if (!bus) {
-        ESP_LOGE(TAG, "BSP I2C bus not initialized; GPS disabled");
+    uart_config_t cfg = {};
+    cfg.baud_rate  = GPS_BAUD;
+    cfg.data_bits  = UART_DATA_8_BITS;
+    cfg.parity     = UART_PARITY_DISABLE;
+    cfg.stop_bits  = UART_STOP_BITS_1;
+    cfg.flow_ctrl  = UART_HW_FLOWCTRL_DISABLE;
+    cfg.source_clk = UART_SCLK_DEFAULT;
+
+    esp_err_t err = uart_driver_install(kUart, 2048, 0, 0, nullptr, 0);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "uart_driver_install failed (%s); GPS disabled",
+                 esp_err_to_name(err));
         return;
     }
-
-    i2c_device_config_t dev_cfg = {};
-    dev_cfg.dev_addr_length = I2C_ADDR_BIT_LEN_7;
-    dev_cfg.device_address  = GPS_I2C_ADDR;
-    dev_cfg.scl_speed_hz    = 400000;        // M10 DDC tops out at 400 kHz
-
-    if (i2c_master_bus_add_device(bus, &dev_cfg, &g_dev) != ESP_OK) {
-        ESP_LOGE(TAG, "i2c add device 0x%02X failed; GPS disabled", GPS_I2C_ADDR);
-        return;
-    }
-
-    if (i2c_master_probe(bus, GPS_I2C_ADDR, 200) == ESP_OK)
-        ESP_LOGI(TAG, "SAM-M10Q present at I2C 0x%02X", GPS_I2C_ADDR);
-    else
-        ESP_LOGW(TAG, "no ACK from I2C 0x%02X - check Port A wiring", GPS_I2C_ADDR);
+    uart_param_config(kUart, &cfg);
+    uart_set_pin(kUart, GPS_UART_TX_PIN, GPS_UART_RX_PIN,
+                 UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
 
     xTaskCreatePinnedToCore(gpsTask, "gps", 4096, nullptr,
                             PRIO_SD_LOGGER, nullptr, APP_CORE_IO);
-    ESP_LOGI(TAG, "GPS reader started (DDC, %d ms poll)", GPS_POLL_MS);
+    ESP_LOGI(TAG, "GPS reader started (UART%d, RX=%d TX=%d, %d baud)",
+             GPS_UART_NUM, GPS_UART_RX_PIN, GPS_UART_TX_PIN, GPS_BAUD);
 }
 
 void        track_set(bool on) { g_track_want.store(on); }
