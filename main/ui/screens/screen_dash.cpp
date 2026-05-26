@@ -163,7 +163,8 @@ float channelValue(int ch, const TelemetryState& t) {
 constexpr int NUM_GAUGES = 6;
 uint8_t  g_slot[NUM_GAUGES] = { 0, 1, 2, 3, 4, 10 };  // default channel per slot
 
-struct Gauge { lv_obj_t* panel; lv_obj_t* arc; lv_obj_t* value; lv_obj_t* unit; lv_obj_t* dd; };
+struct Gauge { lv_obj_t* panel; lv_obj_t* arc; lv_obj_t* value; lv_obj_t* unit;
+               lv_obj_t* dd; lv_obj_t* spark; lv_chart_series_t* sser; };
 Gauge      g_gauge[NUM_GAUGES];
 nvs_handle_t g_nvs = 0;
 char       g_options[256];   // newline-joined channel names for the dropdowns
@@ -199,11 +200,24 @@ void persist() {
 
 // Apply a channel to a slot: show the unit plus the gauge's scale range so the
 // reading always has a reference (e.g. "psi  -15..35").
+// Sparkline values are scaled x10 into the chart's integer axis to keep one
+// decimal of resolution for fractional channels (psi/AFR).
+constexpr float kSparkScale = 10.0f;
+
 void applyChannel(int slot) {
     const ChMeta& m = kCh[g_slot[slot]];
     char u[36];
     snprintf(u, sizeof(u), "%s  %g..%g", m.unit, m.min, m.max);
     lv_label_set_text(g_gauge[slot].unit, u);
+
+    // Re-scale and clear the sparkline history for the new channel.
+    if (g_gauge[slot].spark) {
+        lv_chart_set_range(g_gauge[slot].spark, LV_CHART_AXIS_PRIMARY_Y,
+                           (int32_t)(m.min * kSparkScale),
+                           (int32_t)(m.max * kSparkScale));
+        lv_chart_set_all_value(g_gauge[slot].spark, g_gauge[slot].sser,
+                               LV_CHART_POINT_NONE);
+    }
 }
 
 void dd_cb(lv_event_t* e) {
@@ -254,6 +268,22 @@ void makeGauge(lv_obj_t* parent, int slot) {
     g.unit = lv_label_create(panel);
     lv_obj_add_style(g.unit, &st_label_dim, 0);
     lv_obj_align(g.unit, LV_ALIGN_CENTER, 0, 44);
+
+    // Trend sparkline pinned to the bottom of the panel: a scrolling history of
+    // this gauge's value so you can see where it's been, not just "now".
+    g.spark = lv_chart_create(panel);
+    lv_obj_set_size(g.spark, lv_pct(88), 40);
+    lv_obj_align(g.spark, LV_ALIGN_BOTTOM_MID, 0, -6);
+    lv_chart_set_type(g.spark, LV_CHART_TYPE_LINE);
+    lv_chart_set_point_count(g.spark, 48);
+    lv_chart_set_update_mode(g.spark, LV_CHART_UPDATE_MODE_SHIFT);
+    lv_chart_set_div_line_count(g.spark, 0, 0);
+    lv_obj_set_style_bg_opa(g.spark, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(g.spark, 0, 0);
+    lv_obj_set_style_size(g.spark, 0, 0, LV_PART_INDICATOR);   // no point markers
+    lv_obj_set_style_line_width(g.spark, 2, LV_PART_ITEMS);
+    lv_obj_remove_flag(g.spark, LV_OBJ_FLAG_CLICKABLE);
+    g.sser = lv_chart_add_series(g.spark, COL_CYAN, LV_CHART_AXIS_PRIMARY_Y);
 
     applyChannel(slot);
 }
@@ -361,5 +391,10 @@ void screen_dash_update(void) {
         lv_color_t col = zoneColor(m, v);
         lv_obj_set_style_arc_color(g_gauge[i].arc, col, LV_PART_INDICATOR);
         lv_obj_set_style_text_color(g_gauge[i].value, col, 0);
+
+        // Push the value onto the trend sparkline (same zone colour).
+        lv_chart_set_next_value(g_gauge[i].spark, g_gauge[i].sser,
+                                (int32_t)(v * kSparkScale));
+        lv_chart_set_series_color(g_gauge[i].spark, g_gauge[i].sser, col);
     }
 }
