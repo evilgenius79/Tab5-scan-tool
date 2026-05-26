@@ -22,12 +22,41 @@
 #include "nvs_flash.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
+#include "esp_system.h"
+#include "esp_timer.h"
 #include "core/tab5_power.h"
 
 static const char* TAG = "main";
 
+static const char* reset_reason_str(esp_reset_reason_t r) {
+    switch (r) {
+    case ESP_RST_POWERON:   return "power-on";
+    case ESP_RST_EXT:       return "external pin";
+    case ESP_RST_SW:        return "software restart";
+    case ESP_RST_PANIC:     return "PANIC / exception";
+    case ESP_RST_INT_WDT:   return "INTERRUPT watchdog";
+    case ESP_RST_TASK_WDT:  return "TASK watchdog";
+    case ESP_RST_WDT:       return "other watchdog";
+    case ESP_RST_BROWNOUT:  return "BROWNOUT (voltage dip)";
+    case ESP_RST_DEEPSLEEP: return "deep-sleep wake";
+    case ESP_RST_SDIO:      return "SDIO";
+    default:                return "unknown";
+    }
+}
+
+// Periodic heap report so a slow leak shows up as a downward trend in diag.log
+// (and "min ever free" catches transient low-water marks near a crash).
+static void heap_report_cb(void*) {
+    ESP_LOGI(TAG, "heap: internal free=%u min=%u | psram free=%u min=%u",
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
+             (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_SPIRAM));
+}
+
 extern "C" void app_main(void) {
-    ESP_LOGI(TAG, "Tab5 Scan Tool starting");
+    ESP_LOGW(TAG, "Tab5 Scan Tool starting; last reset: %s",
+             reset_reason_str(esp_reset_reason()));
 
     // --- 1. NVS + shared state ---------------------------------------------
     esp_err_t nvs = nvs_flash_init();
@@ -55,4 +84,11 @@ extern "C" void app_main(void) {
     ESP_LOGI(TAG, "boot complete; free PSRAM=%u internal=%u",
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL));
+
+    // Heap trend every 30 s -> diag.log, to spot a leak behind periodic reboots.
+    const esp_timer_create_args_t ht = { heap_report_cb, nullptr,
+                                         ESP_TIMER_TASK, "heap", false };
+    esp_timer_handle_t h;
+    if (esp_timer_create(&ht, &h) == ESP_OK)
+        esp_timer_start_periodic(h, 30ULL * 1000 * 1000);
 }

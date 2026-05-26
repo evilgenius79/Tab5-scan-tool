@@ -16,6 +16,7 @@
 #include "freertos/semphr.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_system.h"
 
 // Tab5 BSP exposes SD mount helpers.
 #include "bsp/esp-bsp.h"
@@ -23,6 +24,22 @@
 static const char* TAG = "SdLogger";
 
 namespace {
+
+const char* diag_reset_reason_str() {
+    switch (esp_reset_reason()) {
+    case ESP_RST_POWERON:   return "power-on";
+    case ESP_RST_EXT:       return "external pin";
+    case ESP_RST_SW:        return "software restart";
+    case ESP_RST_PANIC:     return "PANIC / exception";
+    case ESP_RST_INT_WDT:   return "INTERRUPT watchdog";
+    case ESP_RST_TASK_WDT:  return "TASK watchdog";
+    case ESP_RST_WDT:       return "other watchdog";
+    case ESP_RST_BROWNOUT:  return "BROWNOUT (voltage dip)";
+    case ESP_RST_DEEPSLEEP: return "deep-sleep wake";
+    case ESP_RST_SDIO:      return "SDIO";
+    default:                return "unknown";
+    }
+}
 
 bool   g_card_mounted = false;
 FILE*  g_file         = nullptr;
@@ -45,6 +62,7 @@ int diag_vprintf(const char* fmt, va_list ap) {
     if (g_diag_file && g_diag_mtx &&
         xSemaphoreTake(g_diag_mtx, 0) == pdTRUE) {
         vfprintf(g_diag_file, fmt, ap2);
+        fflush(g_diag_file);   // persist immediately so a crash keeps the tail
         xSemaphoreGive(g_diag_mtx);
     }
     va_end(ap2);
@@ -71,8 +89,12 @@ void diag_log_init() {
     }
     g_diag_mtx = xSemaphoreCreateMutex();
     // Boot separator so sessions are easy to tell apart in the appended file.
-    fprintf(g_diag_file, "\n==== boot (uptime %llu ms) ====\n",
-            (unsigned long long)(esp_timer_get_time() / 1000));
+    // The reset reason here reveals what ended the PREVIOUS session (panic vs
+    // watchdog vs brownout), which is the key clue for periodic reboots.
+    fprintf(g_diag_file, "\n==== boot (uptime %llu ms, last reset: %s) ====\n",
+            (unsigned long long)(esp_timer_get_time() / 1000),
+            diag_reset_reason_str());
+    fflush(g_diag_file);
     g_prev_vprintf = esp_log_set_vprintf(diag_vprintf);
     ESP_LOGI(TAG, "diagnostic log -> " SD_MOUNT_POINT "/diag.log (append)");
 }
