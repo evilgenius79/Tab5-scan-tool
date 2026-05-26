@@ -11,6 +11,7 @@
 #include "core/event_bus.h"
 #include "obd/dtc_lookup.h"
 #include "obd/custom_pids.h"
+#include "audio/alerts.h"
 
 #include "bsp/esp-bsp.h"
 #include "nvs.h"
@@ -57,6 +58,16 @@ void reconnect_cb(lv_event_t*) {
     EventBus::instance().sendCommand(c, 0);
 }
 
+void alerts_cb(lv_event_t* e) {
+    bool on = lv_obj_has_state((lv_obj_t*)lv_event_get_target(e), LV_STATE_CHECKED);
+    alerts::set_enabled(on);
+    if (g_nvs) { nvs_set_u8(g_nvs, "alerts", on ? 1 : 0); nvs_commit(g_nvs); }
+}
+
+void alert_test_cb(lv_event_t*) {
+    alerts::play("knock");   // plays /sdcard/sounds/knock.wav, else a beep
+}
+
 // A labeled settings row inside a panel.
 lv_obj_t* setting_row(lv_obj_t* parent, const char* label) {
     lv_obj_t* row = lv_obj_create(parent);
@@ -85,12 +96,15 @@ void screen_settings_create(lv_obj_t* parent) {
     uint8_t  saved_bright = DEFAULT_BRIGHTNESS;
     uint32_t saved_baud   = 0;
     uint8_t  saved_bus    = 0;
+    uint8_t  saved_alerts = 1;
     if (nvs_open("settings", NVS_READWRITE, &g_nvs) == ESP_OK) {
         nvs_get_u8(g_nvs,  "bright", &saved_bright);
         nvs_get_u32(g_nvs, "baud",   &saved_baud);
         nvs_get_u8(g_nvs,  "bus",    &saved_bus);
+        nvs_get_u8(g_nvs,  "alerts", &saved_alerts);
     }
     bsp_display_brightness_set(saved_bright);
+    alerts::set_enabled(saved_alerts != 0);
 
     // --- Baud rate ----------------------------------------------------------
     lv_obj_t* row = setting_row(parent, "USB Baud Rate");
@@ -122,6 +136,21 @@ void screen_settings_create(lv_obj_t* parent) {
     lv_obj_set_style_bg_color(g_bright_sl, COL_CYAN, LV_PART_INDICATOR);
     lv_obj_set_style_bg_color(g_bright_sl, COL_CYAN, LV_PART_KNOB);
     lv_obj_add_event_cb(g_bright_sl, bright_cb, LV_EVENT_VALUE_CHANGED, nullptr);
+
+    // --- Audible alerts (mute + test) --------------------------------------
+    row = setting_row(parent, "Audible Alerts");
+    lv_obj_t* test_btn = lv_btn_create(row);
+    lv_obj_add_style(test_btn, &st_accent_btn, 0);
+    lv_obj_add_event_cb(test_btn, alert_test_cb, LV_EVENT_CLICKED, nullptr);
+    lv_obj_t* tl = lv_label_create(test_btn);
+    lv_label_set_text(tl, LV_SYMBOL_VOLUME_MAX " TEST");
+    lv_obj_center(tl);
+
+    lv_obj_t* alerts_sw = lv_switch_create(row);
+    lv_obj_set_size(alerts_sw, 90, 46);
+    lv_obj_set_style_bg_color(alerts_sw, COL_CYAN, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    if (saved_alerts) lv_obj_add_state(alerts_sw, LV_STATE_CHECKED);
+    lv_obj_add_event_cb(alerts_sw, alerts_cb, LV_EVENT_VALUE_CHANGED, nullptr);
 
     // --- Link status + reconnect -------------------------------------------
     row = setting_row(parent, "Adapter Link");
