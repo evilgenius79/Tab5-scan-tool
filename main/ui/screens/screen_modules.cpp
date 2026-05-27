@@ -87,9 +87,13 @@ void screen_modules_create(lv_obj_t* parent) {
     lv_obj_set_width(g_table, lv_pct(100));
     lv_obj_set_flex_grow(g_table, 1);
     lv_table_set_column_count(g_table, 3);
-    lv_table_set_column_width(g_table, 0, 220);
-    lv_table_set_column_width(g_table, 1, 140);
-    lv_table_set_column_width(g_table, 2, 540);
+    // The Tab5 panel is 720 px wide (portrait) and the nav rail takes 150, so
+    // the content is ~570 px. Keep the columns within that and let the CODES
+    // cells wrap (lv_table wraps by default) so full descriptions stay on-screen
+    // across multiple lines instead of running off the right edge.
+    lv_table_set_column_width(g_table, 0, 140);
+    lv_table_set_column_width(g_table, 1, 95);
+    lv_table_set_column_width(g_table, 2, 330);
     lv_table_set_cell_value(g_table, 0, 0, "MODULE");
     lv_table_set_cell_value(g_table, 0, 1, "STATUS");
     lv_table_set_cell_value(g_table, 0, 2, "CODES");
@@ -114,7 +118,7 @@ void screen_modules_update(void) {
     size_t n = bus.getModuleResults(mods, MAX_MODULES);
     lv_table_set_row_count(g_table, n + 1);
 
-    char codes[512];
+    char codes[1024];
     for (size_t i = 0; i < n; ++i) {
         lv_table_set_cell_value(g_table, i + 1, 0, mods[i].name);
 
