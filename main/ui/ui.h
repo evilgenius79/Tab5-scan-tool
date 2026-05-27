@@ -22,6 +22,7 @@ enum class ScreenId : int {
     Sniffer,       // raw CAN frame monitor + filters
     Graph,         // scrolling live trend graph of a selectable parameter
     Gps,           // GNSS status + GPX track recording
+    Tree,          // drag-strip Christmas tree + reaction timer
     Settings,      // baud / brightness / bus selection
     _Count
 };

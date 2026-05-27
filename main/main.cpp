@@ -18,6 +18,7 @@
 #include "logging/sd_logger.h"
 #include "audio/alerts.h"
 #include "gps/gps.h"
+#include "sensors/imu.h"
 
 #include "nvs_flash.h"
 #include "esp_log.h"
@@ -80,6 +81,7 @@ extern "C" void app_main(void) {
     obd_task_start();
     sd_logger_start();
     gps::start();               // GNSS reader on the external UART (if enabled)
+    imu::start();               // BMI270 accel + drag-tree launch detection
 
     ESP_LOGI(TAG, "boot complete; free PSRAM=%u internal=%u",
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM),

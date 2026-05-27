@@ -40,6 +40,7 @@ static void slow_refresh_cb(lv_timer_t*) {
     case ScreenId::Modules:     screen_modules_update();     break;
     case ScreenId::Logging:     screen_logging_update();     break;
     case ScreenId::Gps:         screen_gps_update();         break;
+    case ScreenId::Tree:        screen_tree_update();        break;
     case ScreenId::Settings:    screen_settings_update();    break;
     default: break;
     }

@@ -229,6 +229,15 @@ public:
     GpsFix getGps();
     std::atomic<bool> gps_present{false};   // true once the module sends data
 
+    // --- IMU + drag-tree launch (all lock-free) -----------------------------
+    std::atomic<float>    imu_ax{0.0f};      // accelerometer, G (raw, body axes)
+    std::atomic<float>    imu_ay{0.0f};
+    std::atomic<float>    imu_az{0.0f};
+    std::atomic<bool>     imu_present{false};
+    std::atomic<bool>     perf_armed{false};   // run armed; IMU watches for launch
+    std::atomic<uint64_t> perf_green_us{0};    // tree green-light timestamp (0=none)
+    std::atomic<uint64_t> perf_launch_us{0};   // detected launch timestamp (0=none)
+
 private:
     EventBus() = default;
 

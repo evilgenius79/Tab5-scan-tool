@@ -61,3 +61,7 @@ void screen_graph_update(void);
 // Screen 12 - GPS / GNSS status + GPX track recording.
 void screen_gps_create(lv_obj_t* parent);
 void screen_gps_update(void);
+
+// Screen 13 - Drag-strip Christmas tree + reaction timer.
+void screen_tree_create(lv_obj_t* parent);
+void screen_tree_update(void);

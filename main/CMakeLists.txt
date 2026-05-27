@@ -24,6 +24,9 @@ idf_component_register(
         # --- gps / gnss -----------------------------------------------------
         "gps/gps.cpp"
 
+        # --- sensors (imu) --------------------------------------------------
+        "sensors/imu.cpp"
+
         # --- sd card logging ------------------------------------------------
         "logging/sd_logger.cpp"
 
@@ -46,6 +49,7 @@ idf_component_register(
         "ui/screens/screen_sniffer.cpp"
         "ui/screens/screen_graph.cpp"
         "ui/screens/screen_gps.cpp"
+        "ui/screens/screen_tree.cpp"
         "ui/screens/screen_settings.cpp"
 
     INCLUDE_DIRS
@@ -62,6 +66,8 @@ idf_component_register(
         usb_host_ch34x_vcp     # clone fallback
         m5stack_tab5         # Tab5 BSP (display/touch/SD/audio)
         esp_codec_dev          # speaker/codec for audible alerts
+        sensor_hub             # BMI270 IMU via iot_sensor_hub
+        esp_event              # sensor-hub data-ready events
         fatfs
         nvs_flash
         driver

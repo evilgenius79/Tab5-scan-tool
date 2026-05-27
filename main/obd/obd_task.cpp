@@ -165,10 +165,15 @@ void updatePerf() {
     const uint64_t now = esp_timer_get_time();
 
     if (g_perf.armed && !g_perf.running) {
-        // Launch when we start moving from a near stop.
-        if (mph > 1.0f) {
+        // Launch is timestamped by the IMU (fast); fall back to speed (>1 mph)
+        // only if no IMU is present. The IMU instant becomes t0 so the elapsed
+        // times line up with the drag-tree reaction time.
+        auto& bus = EventBus::instance();
+        uint64_t launch = bus.perf_launch_us.load();
+        bool go = (launch != 0) || (!bus.imu_present.load() && mph > 1.0f);
+        if (go) {
             g_perf.running   = true;
-            g_perf.start_us  = now;
+            g_perf.start_us  = launch ? launch : now;
             g_perf.hit_60    = false;
             g_perf_distance_m = 0.0f;
             g_perf_last_us   = now;
@@ -192,6 +197,7 @@ void updatePerf() {
         g_telem.quarter_mile_s    = (now - g_perf.start_us) / 1e6f;
         g_telem.quarter_mile_trap = mph;
         g_perf.running = g_perf.armed = false;
+        EventBus::instance().perf_armed.store(false);
         ESP_LOGI(TAG, "1/4 mile = %.2fs @ %.1f mph",
                  g_telem.quarter_mile_s, g_telem.quarter_mile_trap);
     }
@@ -655,12 +661,17 @@ void applyCommand(const ObdCommand& cmd) {
         bus.bus.store((CanBus)cmd.arg0);
         break;
 
-    case CmdType::StartPerfRun:
+    case CmdType::StartPerfRun: {
         g_perf.armed   = true;
         g_perf.running = false;
         g_telem.accel_0_60_s = g_telem.quarter_mile_s = 0;
+        auto& bus = EventBus::instance();
+        bus.perf_launch_us.store(0);    // clear prior launch/green so the IMU
+        bus.perf_green_us.store(0);     // re-captures its baseline and re-arms
+        bus.perf_armed.store(true);
         ESP_LOGI(TAG, "perf run armed");
         break;
+    }
 
     case CmdType::Reconnect:
         g_usb.close();   // hotplug task will reopen
