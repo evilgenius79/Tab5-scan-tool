@@ -149,12 +149,12 @@ float channelValue(int ch, const TelemetryState& t) {
         case 17: return c_to_f(t.oil_temp_c);
         case 18: return c_to_f(t.ambient_c);
         case 19: {                                    // IAT2 / charge-air temp
-            // The Ford charge-air custom PID already outputs degF; if none is
-            // defined, fall back to the (standard-decode) charge_air_c field.
+            // Sourced from the Ford charge-air custom PID (already degF). No
+            // standard OBD PID gives post-intercooler temp, so 0 if undefined.
             int ci = chargeAirCustomIdx();
             float cv;
             if (ci >= 0 && custpid::getValue(ci, cv)) return cv;
-            return c_to_f(t.charge_air_c);
+            return 0;
         }
         default: return 0;
     }

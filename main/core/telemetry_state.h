@@ -32,8 +32,6 @@ struct TelemetryState {
 
     // --- Custom / enhanced PIDs (turbo / performance builds) -----------------
     float    boost_psi;           // gauge boost = MAP - baro  [psi]
-    float    charge_air_c;        // CACT / post-intercooler  [degC]
-    float    knock_retard_deg;    // active knock retard      [deg]
     float    hpfp_pressure_bar;   // high-pressure fuel pump  [bar]
     float    ignition_adv_deg;    // commanded ign advance    [deg]
 

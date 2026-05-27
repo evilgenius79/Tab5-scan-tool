@@ -65,7 +65,7 @@ float gValue(int ch, const TelemetryState& t) {
         case 5: return t.throttle_pct;
         case 6: return t.speed_kph * 0.621371f;
         case 7: return t.maf_gps;
-        case 8: if (customByName("knock", v)) return v; return t.knock_retard_deg;
+        case 8: if (customByName("knock", v)) return v; return 0;  // knock: custom PID only
         case 9: return t.ignition_adv_deg;
         default: return 0;
     }

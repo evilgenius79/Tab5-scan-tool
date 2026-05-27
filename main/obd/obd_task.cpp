@@ -324,20 +324,25 @@ void discoverSupportedPids() {
     memset(g_pidSupported, 0, sizeof(g_pidSupported));
     size_t found = 0;
     // Walk the "support" PIDs: 0100 -> 01..20, 0120 -> 21..40, ... up to 01E0.
-    for (uint8_t base = 0x00; base <= 0xC0; base += 0x20) {
+    // Use an int counter so base can reach 0xE0 without the uint8_t += 0x20
+    // wrapping to 0 (which would loop forever).
+    for (int base = 0x00; base <= 0xE0; base += 0x20) {
         char req[8];
         snprintf(req, sizeof(req), "01%02X", base);
         bool ok = false;
         std::string resp = g_link.sendCommand(req, &ok, 2000);
         uint8_t d[8];
-        int n = stn::parsePidResponse(resp, 0x01, base, d, sizeof(d));
+        int n = stn::parsePidResponse(resp, 0x01, (uint8_t)base, d, sizeof(d));
         if (n < 4) break;                       // this block unsupported -> stop
         const uint32_t mask = ((uint32_t)d[0] << 24) | ((uint32_t)d[1] << 16) |
                               ((uint32_t)d[2] << 8) | d[3];
         for (int i = 0; i < 32; ++i) {
             if (mask & (0x80000000u >> i)) {
-                g_pidSupported[(uint8_t)(base + 1 + i)] = true;
-                ++found;
+                int pid = base + 1 + i;         // bit 31 of the 0xE0 block maps to
+                if (pid <= 0xFF) {              // PID 0x100 (invalid) - skip it
+                    g_pidSupported[pid] = true;
+                    ++found;
+                }
             }
         }
         if (!(mask & 0x1)) break;               // bit0 = "next block supported"

@@ -41,9 +41,13 @@ standard SAE PIDs are universal; enhanced/module access uses a Ford profile.
   PSRAM-backed lock-free frame ring so high-rate CAN traffic never blocks the UI.
 - **Auto-reconnecting USB host** (FTDI / CP210x / CH34x via `usb_host_vcp`).
 - **GPS / GNSS** (optional u-blox SAM-M10Q on Port A / UART): live position,
-  speed, heading, altitude and satellite count; GPS-clocked 0-60 / ¼-mile;
-  GPX track recording to SD; GPS columns added to the telemetry log.
-- **Thirteen LVGL screens** (see below).
+  speed, heading (cardinal), altitude and satellite count; auto-configured to
+  10 Hz / 115200 baud on boot; GPS-clocked 0-60 / ¼-mile; GPX track recording
+  to SD; GPS columns added to the telemetry log; a GPS-lock icon in the top bar.
+- **Drag-strip Christmas tree** with IMU-based reaction timer: a full ".500"
+  tree on the TREE screen, launch detected by the onboard BMI270 accelerometer
+  (~10 ms) for a real reaction time, rolling straight into the 0-60 / ¼-mile run.
+- **Fourteen LVGL screens** (see below).
 - **Configurable dash**: 20 selectable gauge channels, switchable 6/4/2-gauge
   layouts, per-gauge trend sparkline, and a global top status bar (battery + MIL)
   on every screen. Assignments + layout persist in NVS. USA units (mph, °F, psi).
@@ -65,7 +69,7 @@ standard SAE PIDs are universal; enhanced/module access uses a Ford profile.
 
 ## Screens & options
 
-The UI is a left-rail tabview. Twelve screens, in nav order:
+The UI is a left-rail tabview. Fourteen screens, in nav order:
 
 | # | Tab | Screen | What it shows / does |
 |---|-----|--------|----------------------|
@@ -80,8 +84,9 @@ The UI is a left-rail tabview. Twelve screens, in nav order:
 | 9 | LOG   | Data Logging | Logging on/off + status; writes telemetry/CAN CSV to SD |
 | 10 | CAN   | Sniffer | Raw CAN frame stream with hex pass-filter keypad |
 | 11 | GRAPH | Trend Graph | Full-screen live line chart; pick any of 10 channels from a dropdown |
-| 12 | GPS   | GPS / Track | Live fix (position, speed, heading, altitude, sats, HDOP) + GPX track RECORD toggle |
-| 13 | SET   | Settings | Adapter/UI configuration (see below) |
+| 12 | GPS   | GPS / Track | Live fix (position, speed, cardinal heading, altitude, sats, HDOP), link baud + measured fix rate, GPX track RECORD toggle |
+| 13 | TREE  | Drag Tree | Full ".500" Christmas tree; IMU-detected launch + reaction time, then 0-60 / ¼-mile / trap |
+| 14 | SET   | Settings | Adapter/UI configuration (see below) |
 
 A persistent **top status bar** (44 px) sits above all screens: battery % +
 charge state on the right, MIL / stored-code summary on the left.
@@ -322,7 +327,8 @@ All app-level tunables live in `main/app_config.h`:
 | GPS          | `main/gps/gps.*` (UART NMEA reader + GPX track logger)      |
 | Audio        | `main/audio/alerts.*`                                       |
 | Logging      | `main/logging/sd_logger.*`                                  |
-| UI           | `main/ui/` (theme, tab shell, 13 screens)                   |
+| Sensors      | `main/sensors/imu.*` (BMI270 accel + drag-launch detection) |
+| UI           | `main/ui/` (theme, tab shell, 14 screens)                   |
 
 ---
 
