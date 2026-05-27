@@ -10,6 +10,9 @@
 
 #include "freertos/FreeRTOS.h"
 
+// Firmware version string, shown in the top status bar.
+#define APP_FW_VERSION   "v1.0"
+
 // -----------------------------------------------------------------------------
 //  Core affinity
 // -----------------------------------------------------------------------------

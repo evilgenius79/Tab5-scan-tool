@@ -177,9 +177,9 @@ void screen_performance_update(void) {
         lv_obj_set_style_text_color(g_gps_lbl, COL_AMBER, 0);
     } else {
         snprintf(gbuf, sizeof(gbuf),
-                 LV_SYMBOL_GPS " %.0f mph   %.0f\xC2\xB0   %.0f ft   %u sats",
-                 g.speed_kph * 0.621371f, g.course_deg, g.alt_m * 3.28084f,
-                 (unsigned)g.sats);
+                 LV_SYMBOL_GPS " %.0f mph   %s   %.0f ft   %u sats",
+                 g.speed_kph * 0.621371f, cardinal_dir(g.course_deg),
+                 g.alt_m * 3.28084f, (unsigned)g.sats);
         lv_label_set_text(g_gps_lbl, gbuf);
         lv_obj_set_style_text_color(g_gps_lbl, COL_GREEN, 0);
     }

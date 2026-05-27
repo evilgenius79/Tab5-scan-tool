@@ -118,6 +118,12 @@ void ui_init() {
     lv_obj_set_style_text_color(g_mil_lbl, COL_TEXT_DIM, 0);
     lv_label_set_text(g_mil_lbl, LV_SYMBOL_WARNING " status --");
 
+    // Centered firmware version (flex space-between puts it in the middle).
+    lv_obj_t* ver = lv_label_create(g_topbar);
+    lv_obj_set_style_text_font(ver, &lv_font_montserrat_18, 0);
+    lv_obj_set_style_text_color(ver, COL_TEXT_DIM, 0);
+    lv_label_set_text(ver, "Tab5 Scan Tool  " APP_FW_VERSION);
+
     // Right-side group so the GPS-lock icon sits directly beside the battery.
     lv_obj_t* right = lv_obj_create(g_topbar);
     lv_obj_remove_style_all(right);

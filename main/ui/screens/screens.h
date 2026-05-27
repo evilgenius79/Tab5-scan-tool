@@ -10,6 +10,14 @@
 
 #include "lvgl.h"
 
+// Course-over-ground degrees -> 16-point compass string ("N", "NNE", "NE", ...).
+static inline const char* cardinal_dir(float deg) {
+    static const char* d[16] = {"N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+                                "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"};
+    if (deg < 0.0f) deg += 360.0f;
+    return d[(int)((deg + 11.25f) / 22.5f) & 15];
+}
+
 // Screen 0 - Home menu (function cards that jump to each screen).
 void screen_home_create(lv_obj_t* parent);
 void screen_home_update(void);
