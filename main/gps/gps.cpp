@@ -237,33 +237,98 @@ void sendUbx(uint8_t cls, uint8_t id, const uint8_t* payload, uint16_t len) {
     uart_wait_tx_done(kUart, pdMS_TO_TICKS(100));
 }
 
-// Push measurement rate + UART1 baud to the M10 via UBX-CFG-VALSET (RAM layer).
-// Sent at the factory baud first (converts a 9600 module), then at the target
-// baud (no-op if already there), so it works from any starting state.
-void gpsConfigure() {
-    const uint16_t meas = 1000 / GPS_NAV_RATE_HZ;     // ms between measurements
-    const uint32_t baud = GPS_BAUD;
-    uint8_t p[32];
-    int n = 0;
-    p[n++] = 0x00;                                     // version
-    p[n++] = 0x01;                                     // layer = RAM
-    p[n++] = 0x00; p[n++] = 0x00;                      // reserved
-    p[n++] = 0x01; p[n++] = 0x00; p[n++] = 0x21; p[n++] = 0x30;   // CFG-RATE-MEAS U2
-    p[n++] = (uint8_t)(meas & 0xFF); p[n++] = (uint8_t)(meas >> 8);
-    p[n++] = 0x02; p[n++] = 0x00; p[n++] = 0x21; p[n++] = 0x30;   // CFG-RATE-NAV U2
-    p[n++] = 0x01; p[n++] = 0x00;                                  // = 1 cycle
-    p[n++] = 0x01; p[n++] = 0x00; p[n++] = 0x52; p[n++] = 0x40;   // CFG-UART1-BAUDRATE U4
-    p[n++] = (uint8_t)(baud);       p[n++] = (uint8_t)(baud >> 8);
-    p[n++] = (uint8_t)(baud >> 16); p[n++] = (uint8_t)(baud >> 24);
+// Wait for a UBX-ACK-ACK(+1) / ACK-NAK(-1) to a CFG message; 0 if none arrive.
+// Confirms the module actually received and accepted our command (i.e. our TX
+// line reaches the module's RX), which a baud change alone can't verify.
+int waitUbxAck(int ms) {
+    uint64_t end = esp_timer_get_time() + (uint64_t)ms * 1000;
+    int st = 0; uint8_t id = 0, b = 0;
+    while (esp_timer_get_time() < end) {
+        if (uart_read_bytes(kUart, &b, 1, pdMS_TO_TICKS(20)) <= 0) continue;
+        switch (st) {
+        case 0: st = (b == 0xB5) ? 1 : 0; break;
+        case 1: st = (b == 0x62) ? 2 : 0; break;
+        case 2: st = (b == 0x05) ? 3 : 0; break;          // ACK class
+        case 3: id = b; st = (b == 0x01 || b == 0x00) ? 4 : 0; break;
+        case 4: st = (b == 0x02) ? 5 : 0; break;          // len = 2
+        case 5: st = (b == 0x00) ? 6 : 0; break;
+        case 6: st = (b == 0x06) ? 7 : 0; break;          // acked class = CFG
+        case 7: return id == 0x01 ? 1 : -1;               // acked msg id byte
+        }
+    }
+    return 0;
+}
 
-    uart_set_baudrate(kUart, GPS_FACTORY_BAUD);
-    sendUbx(0x06, 0x8A, p, n);
-    vTaskDelay(pdMS_TO_TICKS(150));
-    uart_set_baudrate(kUart, GPS_BAUD);
-    sendUbx(0x06, 0x8A, p, n);
-    vTaskDelay(pdMS_TO_TICKS(50));
+// True if NMEA ("$G"/"$P") is seen within `ms` at the current baud.
+bool sawNmea(int ms) {
+    uint64_t end = esp_timer_get_time() + (uint64_t)ms * 1000;
+    uint8_t buf[128];
+    bool dollar = false;
+    while (esp_timer_get_time() < end) {
+        int r = uart_read_bytes(kUart, buf, sizeof(buf), pdMS_TO_TICKS(40));
+        for (int i = 0; i < r; ++i) {
+            if (buf[i] == '$') dollar = true;
+            else if (dollar && (buf[i] == 'G' || buf[i] == 'P')) return true;
+        }
+    }
+    return false;
+}
+
+void valsetMeas(uint16_t ms) {   // CFG-RATE-MEAS (+ CFG-RATE-NAV = 1), RAM layer
+    uint8_t p[] = {0x00, 0x01, 0x00, 0x00,
+                   0x01, 0x00, 0x21, 0x30, (uint8_t)ms, (uint8_t)(ms >> 8),
+                   0x02, 0x00, 0x21, 0x30, 0x01, 0x00};
+    sendUbx(0x06, 0x8A, p, sizeof(p));
+}
+
+void valsetBaud(uint32_t b) {    // CFG-UART1-BAUDRATE (U4), RAM layer
+    uint8_t p[] = {0x00, 0x01, 0x00, 0x00,
+                   0x01, 0x00, 0x52, 0x40,
+                   (uint8_t)b, (uint8_t)(b >> 8), (uint8_t)(b >> 16), (uint8_t)(b >> 24)};
+    sendUbx(0x06, 0x8A, p, sizeof(p));
+}
+
+// Detect the module's current baud, verify our TX reaches it (ACK), then raise
+// the baud and set the target rate. Ordering matters: baud first, rate second,
+// so we never command 10 Hz on a 9600 link (which would flood / truncate).
+void gpsConfigure() {
+    static const uint32_t cands[2] = { GPS_BAUD, GPS_FACTORY_BAUD };
+    uint32_t cur = 0;
+    for (uint32_t b : cands) {
+        uart_set_baudrate(kUart, b);
+        uart_flush_input(kUart);
+        if (sawNmea(500)) { cur = b; break; }
+    }
+    if (!cur) {
+        ESP_LOGW(TAG, "config: no NMEA at %d or %d baud - skipping",
+                 GPS_BAUD, GPS_FACTORY_BAUD);
+        uart_set_baudrate(kUart, GPS_BAUD);
+        return;
+    }
+    uart_set_baudrate(kUart, cur);
+
+    // TX health check: a harmless 1 Hz command, and see if the module ACKs it.
     uart_flush_input(kUart);
-    ESP_LOGI(TAG, "sent UBX config: %d Hz, %d baud", GPS_NAV_RATE_HZ, GPS_BAUD);
+    valsetMeas(1000);
+    int ack = waitUbxAck(400);
+    ESP_LOGI(TAG, "config: module at %u baud, command ack=%s", (unsigned)cur,
+             ack > 0 ? "ACK" : ack < 0 ? "NAK" : "NONE");
+    if (ack == 0)
+        ESP_LOGW(TAG, "module not acknowledging commands - check TX wiring "
+                      "(GPIO%d -> module RX); rate/baud config will not apply",
+                 GPS_UART_TX_PIN);
+
+    // Raise baud, then set the real rate at the new baud.
+    if (cur != GPS_BAUD) {
+        valsetBaud(GPS_BAUD);
+        vTaskDelay(pdMS_TO_TICKS(150));
+        uart_set_baudrate(kUart, GPS_BAUD);
+    }
+    uart_flush_input(kUart);
+    valsetMeas(1000 / GPS_NAV_RATE_HZ);
+    waitUbxAck(400);
+    uart_flush_input(kUart);
+    ESP_LOGI(TAG, "config: requested %d Hz @ %d baud", GPS_NAV_RATE_HZ, GPS_BAUD);
 }
 #endif
 
