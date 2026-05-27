@@ -85,3 +85,14 @@ CONFIG_LV_TICK_CUSTOM=y
 # Larger LVGL heap for the 1280x720 widget tree, drawn from PSRAM.
 CONFIG_LV_MEM_SIZE_KILOBYTES=128
 CONFIG_LV_USE_PERF_MONITOR=n
+
+# --- Crash diagnostics -------------------------------------------------------
+# Panic (with backtrace) if a task starves the watchdog for 5 s, instead of
+# letting the 9 s RTC watchdog reset silently ("other watchdog"). The backtrace
+# is saved to the coredump flash partition for headless (in-vehicle) retrieval
+# via `idf.py coredump-info` / `coredump-debug`.
+CONFIG_ESP_TASK_WDT_PANIC=y
+CONFIG_ESP_COREDUMP_ENABLE_TO_FLASH=y
+CONFIG_ESP_COREDUMP_DATA_FORMAT_ELF=y
+CONFIG_ESP_COREDUMP_CHECKSUM_CRC32=y
+CONFIG_ESP_COREDUMP_LOGS=y
